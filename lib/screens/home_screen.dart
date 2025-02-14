@@ -77,23 +77,27 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _onReceiveTaskData(Object? data) {
-  print('HomeScreen - Datos recibidos: $data');
-  if (data != null && mounted) {
-    final Map<String, dynamic> receivedData = data as Map<String, dynamic>;
-    
-    if (receivedData.containsKey('type') && receivedData['type'] == 'notification') {
-      // Es una notificación
-      setState(() {
-        notifications.insert(0, '${DateTime.now()}: ${receivedData['message']}');
-      });
-    } else {
-      // Es un cambio de estado de conexión
-      setState(() {
-        _connectionMessage = receivedData['message'] as String;
-      });
+    print('HomeScreen - Datos recibidos: $data');
+    if (data != null && mounted) {
+      final Map<String, dynamic> receivedData = data as Map<String, dynamic>;
+
+      if (receivedData.containsKey('type') && receivedData['type'] == 'notification') {
+        setState(() {
+          // Agregar la nueva notificación al inicio
+          notifications.insert(0, '${DateTime.now()}: ${receivedData['message']}');
+
+          // Mantener solo las 10 más recientes
+          if (notifications.length > 10) {
+            notifications.removeLast(); // Elimina la más antigua
+          }
+        });
+      } else {
+        setState(() {
+          _connectionMessage = receivedData['message'] as String;
+        });
+      }
     }
   }
-}
 
   Future<void> _loadUserData() async {
     try {
@@ -230,7 +234,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               Expanded(
-                child: ListView.builder(
+                child: notifications.isEmpty
+                    ? Center(
+                  child: Text('No hay notificaciones',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                )
+                    : ListView.builder(
                   itemCount: notifications.length,
                   itemBuilder: (context, index) {
                     return ListTile(

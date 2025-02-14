@@ -61,8 +61,12 @@ class NotificationService {
       }
 
       if (content.contains("Yape!")) {
+        // Notificar a la UI que se recibió una notificación
+        onNotificationReceived?.call(content); // Añade esta línea
         await processYapeMessage(content, idnotifacion);
       } else if (content.contains("PLINEARON")) {
+        // Notificar a la UI que se recibió una notificación
+        onNotificationReceived?.call(content); // Añade esta línea
         await processPlinMessage(content, idnotifacion);
       }
     } catch (e) {
@@ -98,7 +102,8 @@ class NotificationService {
       if (userData == null) {
         return;
       }
-      final RegExp regex = RegExp(r"Te PLINEARON S/(\d+\.\d+).*");
+      // Regex más flexible que ignora espacios y hace opcional el S/
+      final RegExp regex = RegExp(r"PLINEARON\s*(?:S/)?\s*(\d+\.?\d*)");
       final match = regex.firstMatch(message);
 
       if (match?.group(1) == null) {
@@ -113,7 +118,8 @@ class NotificationService {
         'Monto': double.parse(match!.group(1)!),
         'Estado': "ACTIVO",
         'FechaHora': DateTime.now().toIso8601String(),
-        'IdNotificationApp': idnotifacion
+        'IdNotificationApp': idnotifacion,
+        'Tipo': "Plin"
       });
     } catch (e) {
       print('Error procesando mensaje PLIN: $e');
@@ -127,9 +133,8 @@ class NotificationService {
       if (userData == null){
         return;
       }
-
-      final RegExp regex =
-          RegExp(r"Yape! (.*?) te envi[oó] un pago por S/ (\d+)");
+      // Ajusta la expresión regular para capturar decimales (ej: 5.50)
+      final RegExp regex = RegExp(r"Yape[!]?\s+(.*?)\s+te\s+envi[oó]\s+(?:un\s+pago\s+por\s+)?(?:S/)?\s*(\d+\.?\d*)");
       final match = regex.firstMatch(message);
 
       if (match?.group(1) == null || match?.group(2) == null) {
@@ -137,14 +142,16 @@ class NotificationService {
         return;
       }
 
+      // Parsea el monto como double en lugar de int
       await sendToApi({
         'IdUsuarioNegocio': userData['idUsuario'],
         'IdNegocio': userData['idNegocio'],
         'NombreCliente': match!.group(1)!,
-        'Monto': int.parse(match.group(2)!),
+        'Monto': double.parse(match.group(2)!), // Usa double.parse
         'Estado': "ACTIVO",
         'FechaHora': DateTime.now().toIso8601String(),
-        'IdNotificationApp': idnotifacion
+        'IdNotificationApp': idnotifacion,
+        'Tipo': "Yape"
       });
     } catch (e) {
       print('Error procesando mensaje Yape: $e');
