@@ -7,10 +7,10 @@ import 'dart:async';
 
 @pragma('vm:entry-point')
 void startCallback() {
-  FlutterForegroundTask.setTaskHandler(YapeAlertTaskHandler());
+  FlutterForegroundTask.setTaskHandler(BiPeAlertTaskHandler());
 }
 
-class YapeAlertTaskHandler extends TaskHandler {
+class BiPeAlertTaskHandler extends TaskHandler {
   final NotificationService _notificationService = NotificationService();
   final SignalRService _signalRService = SignalRService();
 
@@ -47,7 +47,7 @@ Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
       _signalRService.onConnectionStateChanged = (isConnected, message) {
         print('TaskHandler - Estado SignalR: $isConnected, $message');
         FlutterForegroundTask.updateService(
-          notificationTitle: 'YapeAlerta',
+          notificationTitle: 'BiPe Alerta',
           notificationText: message,
         );
         FlutterForegroundTask.sendDataToMain({

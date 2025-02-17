@@ -10,9 +10,9 @@ void main() async {
   // Inicializar el servicio en segundo plano
   FlutterForegroundTask.init(
     androidNotificationOptions: AndroidNotificationOptions(
-      channelId: 'yapealerta_service',
-      channelName: 'YapeAlerta Service',
-      channelDescription: 'Servicio de monitoreo de Yape',
+      channelId: 'BiPealerta_service',
+      channelName: 'BiPeAlerta Service',
+      channelDescription: 'Servicio de monitoreo de BiPe',
       onlyAlertOnce: true,
       visibility: NotificationVisibility.VISIBILITY_PUBLIC,
     ),
@@ -46,7 +46,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Yape Alertas',
+      title: 'BiPe Alertas',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,

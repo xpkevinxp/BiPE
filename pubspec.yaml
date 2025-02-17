@@ -1,4 +1,4 @@
-name: yapealerta
+name: bipealerta
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -42,6 +42,8 @@ dependencies:
   google_fonts: ^6.2.1
   connectivity_plus: ^5.0.1
   flutter_foreground_task: ^8.17.0
+  animate_do: ^3.0.2
+  url_launcher: ^6.1.14
   
 dev_dependencies:
   flutter_test:

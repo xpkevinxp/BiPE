@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:bipealerta/models/BipeModel.dart';
+import 'package:bipealerta/services/auth_service.dart';
 import 'package:http/http.dart' as http;
 import 'package:notification_listener_service/notification_event.dart';
 import 'dart:convert';
@@ -12,7 +14,7 @@ typedef ErrorCallback = void Function(String error);
 class NotificationService {
   static const String baseUrl = 'https://apialert.c-centralizador.com/api';
   static const Duration requestTimeout = Duration(seconds: 30);
-
+  final AuthService _authService = AuthService();
   NotificationCallback? onNotificationReceived;
   ErrorCallback? onError;
 
@@ -53,6 +55,15 @@ class NotificationService {
     try {
       final content = event.content;
       final idnotifacion = event.id;
+
+
+      // Verificamos si es un evento de eliminación
+    if (event.hasRemoved == true) {
+      print('Notificación eliminada: $content');
+      return;
+    }
+
+
       print('Notification received: $content');
 
       if (content == null || idnotifacion == null) {
@@ -60,14 +71,13 @@ class NotificationService {
         return;
       }
 
-      if (content.contains("Yape!")) {
-        // Notificar a la UI que se recibió una notificación
-        onNotificationReceived?.call(content); // Añade esta línea
-        await processYapeMessage(content, idnotifacion);
-      } else if (content.contains("PLINEARON")) {
-        // Notificar a la UI que se recibió una notificación
-        onNotificationReceived?.call(content); // Añade esta línea
-        await processPlinMessage(content, idnotifacion);
+      final bipes = await _authService.getBipes();
+      for (var bipe in bipes) {
+        if (content.contains(bipe.contain)) {
+          onNotificationReceived?.call(content);
+          await processMessage(content, idnotifacion, bipe);
+          break;
+        }
       }
     } catch (e) {
       print('Error procesando notificación: $e');
@@ -96,66 +106,41 @@ class NotificationService {
     }
   }
 
-  Future<void> processPlinMessage(String message, int idnotifacion) async {
+  Future<void> processMessage(
+      String message, int idnotifacion, Bipe bipe) async {
     try {
       final userData = await _getUserData();
       if (userData == null) {
         return;
       }
-      // Regex más flexible que ignora espacios y hace opcional el S/
-      final RegExp regex = RegExp(r"PLINEARON\s*(?:S/)?\s*(\d+\.?\d*)");
+
+      final RegExp regex = RegExp(bipe.regex);
       final match = regex.firstMatch(message);
 
-      if (match?.group(1) == null) {
-        print('Formato de mensaje PLIN inválido');
+      if (match == null) {
+        print('Formato de mensaje inválido para ${bipe.contain}');
         return;
       }
+
+      // Para Yape que tiene dos grupos (nombre y monto)
+      final String nombreCliente =
+          match.groupCount > 1 ? match.group(1)! : bipe.contain;
+      final String montoStr =
+          match.groupCount > 1 ? match.group(2)! : match.group(1)!;
 
       await sendToApi({
         'IdUsuarioNegocio': userData['idUsuario'],
         'IdNegocio': userData['idNegocio'],
-        'NombreCliente': 'PLIN',
-        'Monto': double.parse(match!.group(1)!),
+        'NombreCliente': nombreCliente,
+        'Monto': double.parse(montoStr),
         'Estado': "ACTIVO",
         'FechaHora': DateTime.now().toIso8601String(),
         'IdNotificationApp': idnotifacion,
-        'Tipo': "Plin"
+        'IdBilletera': bipe.idBilletera // Cambiamos 'Tipo' por 'IdBilletera'
       });
     } catch (e) {
-      print('Error procesando mensaje PLIN: $e');
-      onError?.call('Error al procesar pago PLIN');
-    }
-  }
-
-  Future<void> processYapeMessage(String message, int idnotifacion) async {
-    try {
-      final userData = await _getUserData();
-      if (userData == null){
-        return;
-      }
-      // Ajusta la expresión regular para capturar decimales (ej: 5.50)
-      final RegExp regex = RegExp(r"Yape[!]?\s+(.*?)\s+te\s+envi[oó]\s+(?:un\s+pago\s+por\s+)?(?:S/)?\s*(\d+\.?\d*)");
-      final match = regex.firstMatch(message);
-
-      if (match?.group(1) == null || match?.group(2) == null) {
-        print('Formato de mensaje Yape inválido');
-        return;
-      }
-
-      // Parsea el monto como double en lugar de int
-      await sendToApi({
-        'IdUsuarioNegocio': userData['idUsuario'],
-        'IdNegocio': userData['idNegocio'],
-        'NombreCliente': match!.group(1)!,
-        'Monto': double.parse(match.group(2)!), // Usa double.parse
-        'Estado': "ACTIVO",
-        'FechaHora': DateTime.now().toIso8601String(),
-        'IdNotificationApp': idnotifacion,
-        'Tipo': "Yape"
-      });
-    } catch (e) {
-      print('Error procesando mensaje Yape: $e');
-      onError?.call('Error al procesar pago Yape');
+      print('Error procesando mensaje ${bipe.contain}: $e');
+      onError?.call('Error al procesar pago ${bipe.contain}');
     }
   }
 

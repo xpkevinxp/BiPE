@@ -1,4 +1,4 @@
-package com.centralizador.yapealerta
+package com.centralizador.bipealerta
 
 import io.flutter.embedding.android.FlutterActivity
 

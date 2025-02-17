@@ -1,7 +1,9 @@
+import 'package:animate_do/animate_do.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
 import 'dart:async';
 import '../services/auth_service.dart';
@@ -21,6 +23,9 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoggingOut = false;
   bool _isLoading = true;
   String? _connectionMessage;
+  var nombre = "";
+  var nombreNegocio = "";
+  var nombrePlan = "";
 
   Future<void> _requestPermissions() async {
     final NotificationPermission notificationPermission =
@@ -30,22 +35,22 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     if (Platform.isAndroid) {
-        if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
-            await FlutterForegroundTask.requestIgnoreBatteryOptimization();
-        }
+      if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
+        await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+      }
 
-        // Agregar permiso para leer notificaciones
-        final isGranted = await NotificationListenerService.isPermissionGranted();
-        if (!isGranted) {
-            await NotificationListenerService.requestPermission();
-        }
+      // Agregar permiso para leer notificaciones
+      final isGranted = await NotificationListenerService.isPermissionGranted();
+      if (!isGranted) {
+        await NotificationListenerService.requestPermission();
+      }
     }
   }
 
   Future<void> _startForegroundTask() async {
     if (!await FlutterForegroundTask.isRunningService) {
       await FlutterForegroundTask.startService(
-        notificationTitle: 'YapeAlerta',
+        notificationTitle: 'BiPeAlerta',
         notificationText: 'Monitoreando notificaciones',
         callback: startCallback,
       );
@@ -55,10 +60,10 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _stopForegroundTask() async {
     try {
       await FlutterForegroundTask.stopService()
-        .timeout(const Duration(seconds: 5), onTimeout: () {
-          print('Timeout al detener el servicio');
-          throw TimeoutException('No se pudo detener el servicio');
-        });
+          .timeout(const Duration(seconds: 5), onTimeout: () {
+        print('Timeout al detener el servicio');
+        throw TimeoutException('No se pudo detener el servicio');
+      });
     } catch (e) {
       print('Error al detener el servicio: $e');
     }
@@ -81,10 +86,12 @@ class _HomeScreenState extends State<HomeScreen> {
     if (data != null && mounted) {
       final Map<String, dynamic> receivedData = data as Map<String, dynamic>;
 
-      if (receivedData.containsKey('type') && receivedData['type'] == 'notification') {
+      if (receivedData.containsKey('type') &&
+          receivedData['type'] == 'notification') {
         setState(() {
           // Agregar la nueva notificación al inicio
-          notifications.insert(0, '${DateTime.now()}: ${receivedData['message']}');
+          notifications.insert(
+              0, '${DateTime.now()}: ${receivedData['message']}');
 
           // Mantener solo las 10 más recientes
           if (notifications.length > 10) {
@@ -105,6 +112,10 @@ class _HomeScreenState extends State<HomeScreen> {
       final idUsuario = prefs.getInt('idUsuario');
       final idNegocio = prefs.getInt('idNegocio');
 
+      nombre = (await _authService.getNombre())!;
+      nombreNegocio = (await _authService.getNombreNegocio())!;
+      nombrePlan = (await _authService.getNombrePlan())!;
+
       if (idUsuario == null || idNegocio == null) {
         throw Exception('Datos de usuario no encontrados');
       }
@@ -117,7 +128,6 @@ class _HomeScreenState extends State<HomeScreen> {
           _connectionMessage = 'Iniciando...';
         });
       }
-
     } catch (e) {
       print('Error cargando datos: $e');
       _mostrarError('Error al cargar datos');
@@ -147,7 +157,7 @@ class _HomeScreenState extends State<HomeScreen> {
       print('Iniciando proceso de logout...');
       await _stopForegroundTask();
       print('Servicio detenido');
-      
+
       await _authService.logout();
       print('Logout completado');
 
@@ -162,6 +172,41 @@ class _HomeScreenState extends State<HomeScreen> {
     } finally {
       if (mounted) {
         setState(() => _isLoggingOut = false);
+      }
+    }
+  }
+
+  // Agregar estos métodos para el WhatsApp
+  void _abrirWhatsAppSoporte() async {
+    final whatsappUrl =
+        "https://wa.me/51901089996?text=Hola,%20necesito%20soporte%20técnico";
+    if (await canLaunch(whatsappUrl)) {
+      await launch(whatsappUrl);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se pudo abrir WhatsApp'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _abrirWhatsAppUpgrade() async {
+    final whatsappUrl =
+        "https://wa.me/51901089996?text=Hola,%20quisiera%20información%20sobre%20los%20planes%20premium";
+    if (await canLaunch(whatsappUrl)) {
+      await launch(whatsappUrl);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se pudo abrir WhatsApp'),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
@@ -187,69 +232,283 @@ class _HomeScreenState extends State<HomeScreen> {
       child: WillPopScope(
         onWillPop: () async => false,
         child: Scaffold(
-          appBar: AppBar(
-            title: const Text('Home'),
-            actions: [
-              IconButton(
-                icon: _isLoggingOut
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(Colors.white),
+          body: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+                gradient: LinearGradient(begin: Alignment.topCenter, colors: [
+              Colors.green.shade300,
+              Colors.green.shade200,
+              Colors.green.shade100,
+            ])),
+            child: Column(
+              children: [
+                const SizedBox(height: 60),
+                // Header con título y menú
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          FadeInUp(
+                              duration: const Duration(milliseconds: 1000),
+                              child: const Text(
+                                "BiPe Alerta",
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.bold),
+                              )),
+                          const SizedBox(height: 10),
+                          FadeInUp(
+                              duration: const Duration(milliseconds: 1300),
+                              child: const Text(
+                                "Panel de Control",
+                                style: TextStyle(
+                                    color: Colors.white, fontSize: 18),
+                              )),
+                        ],
+                      ),
+                      Row(
+                        children: [
+                          PopupMenuButton<String>(
+                            icon: const Icon(Icons.more_vert,
+                                color: Colors.white),
+                            onSelected: (value) {
+                              if (value == 'support') {
+                                _abrirWhatsAppSoporte();
+                              } else if (value == 'upgrade') {
+                                _abrirWhatsAppUpgrade();
+                              }
+                            },
+                            itemBuilder: (BuildContext context) => [
+                              const PopupMenuItem(
+                                value: 'support',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.support_agent,
+                                        color: Colors.green),
+                                    SizedBox(width: 8),
+                                    Text('Soporte'),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'upgrade',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.upgrade, color: Colors.green),
+                                    SizedBox(width: 8),
+                                    Text('Mejorar Plan'),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          IconButton(
+                            icon: _isLoggingOut
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                          Colors.white),
+                                    ),
+                                  )
+                                : const Icon(Icons.logout, color: Colors.white),
+                            onPressed: _isLoggingOut ? null : _handleLogout,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Contenido principal con efecto curvo
+                Expanded(
+                  child: Container(
+                    decoration: const BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(60),
+                            topRight: Radius.circular(60))),
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 30),
+                        // Tarjeta de información
+                        Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 20),
+                          padding: const EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.green.shade100,
+                                blurRadius: 10,
+                                spreadRadius: 1,
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.business,
+                                color: Colors.green.shade400,
+                                size: 24,
+                              ),
+                              const SizedBox(width: 15),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      nombreNegocio,
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.green.shade900,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      nombre,
+                                      style: TextStyle(
+                                        color: Colors.grey.shade700,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 12,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.green.shade100,
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Text(
+                                        nombrePlan,
+                                        style: TextStyle(
+                                          color: Colors.green.shade700,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      )
-                    : const Icon(Icons.logout),
-                onPressed: _isLoggingOut ? null : _handleLogout,
-              ),
-            ],
-          ),
-          body: Column(
-            children: [
-              if (_connectionMessage != null)
-                Container(
-                  color: _connectionMessage?.contains('Conectado') == true
-                      ? Colors.green[100]
-                      : Colors.red[100],
-                  padding: const EdgeInsets.all(8),
-                  width: double.infinity,
-                  child: Text(
-                    _connectionMessage!,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: _connectionMessage?.contains('Conectado') == true
-                          ? Colors.green[900]
-                          : Colors.red[900],
-                      fontWeight: FontWeight.bold,
+
+                        // Estado de conexión
+                        if (_connectionMessage != null)
+                          Container(
+                            margin: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.green.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.check_circle,
+                                  color: Colors.green.shade400,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  "Conectado",
+                                  style: TextStyle(
+                                    color: Colors.green.shade700,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                        const SizedBox(height: 20),
+                        // Título de notificaciones
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.notifications_none,
+                                color: Colors.grey.shade700,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Últimas Notificaciones',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey.shade800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Lista de notificaciones
+                        Expanded(
+                          child: notifications.isEmpty
+                              ? Center(
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.notifications_off_outlined,
+                                        size: 48,
+                                        color: Colors.grey.shade400,
+                                      ),
+                                      const SizedBox(height: 12),
+                                      Text(
+                                        'No hay notificaciones',
+                                        style: TextStyle(
+                                          color: Colors.grey.shade600,
+                                          fontSize: 16,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                )
+                              : ListView.builder(
+                                  padding: const EdgeInsets.all(20),
+                                  itemCount: notifications.length,
+                                  itemBuilder: (context, index) {
+                                    return Card(
+                                      elevation: 0,
+                                      margin: const EdgeInsets.only(bottom: 12),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: ListTile(
+                                        title: Text(
+                                          notifications[index],
+                                          style: const TextStyle(fontSize: 14),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              const Padding(
-                padding: EdgeInsets.all(16.0),
-                child: Text(
-                  'Últimas Notificaciones',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-              ),
-              Expanded(
-                child: notifications.isEmpty
-                    ? Center(
-                  child: Text('No hay notificaciones',
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                )
-                    : ListView.builder(
-                  itemCount: notifications.length,
-                  itemBuilder: (context, index) {
-                    return ListTile(
-                      title: Text(notifications[index]),
-                    );
-                  },
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
