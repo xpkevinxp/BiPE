@@ -37,13 +37,16 @@ dependencies:
   http: ^1.1.0
   shared_preferences: ^2.2.0
   permission_handler: ^11.0.0
-  notification_listener_service: ^0.3.4
   signalr_netcore: ^1.4.0
   google_fonts: ^6.2.1
   connectivity_plus: ^5.0.1
   flutter_foreground_task: ^8.17.0
   animate_do: ^3.0.2
   url_launcher: ^6.1.14
+  flutter_notification_listener:
+    git:
+      url: https://github.com/xpkevinxp/flutter_notification_listener
+      ref: master  # o el branch/tag que uses
   
 dev_dependencies:
   flutter_test:

@@ -1,7 +1,7 @@
 import 'package:animate_do/animate_do.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:notification_listener_service/notification_listener_service.dart';
+import 'package:flutter_notification_listener/flutter_notification_listener.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:io';
@@ -39,13 +39,13 @@ class _HomeScreenState extends State<HomeScreen> {
         await FlutterForegroundTask.requestIgnoreBatteryOptimization();
       }
 
-      // Agregar permiso para leer notificaciones
-      final isGranted = await NotificationListenerService.isPermissionGranted();
-      if (!isGranted) {
-        await NotificationListenerService.requestPermission();
+      // Cambiar por la nueva librería
+      final hasPermission = await NotificationsListener.hasPermission;
+      if (!hasPermission!) {
+        await NotificationsListener.openPermissionSettings();
       }
     }
-  }
+}
 
   Future<void> _startForegroundTask() async {
     if (!await FlutterForegroundTask.isRunningService) {

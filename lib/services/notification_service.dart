@@ -1,11 +1,12 @@
 import 'dart:async';
+import 'dart:isolate';
+import 'dart:ui';
 
 import 'package:bipealerta/models/BipeModel.dart';
 import 'package:bipealerta/services/auth_service.dart';
+import 'package:flutter_notification_listener/flutter_notification_listener.dart';
 import 'package:http/http.dart' as http;
-import 'package:notification_listener_service/notification_event.dart';
 import 'dart:convert';
-import 'package:notification_listener_service/notification_listener_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 typedef NotificationCallback = void Function(String message);
@@ -18,32 +19,62 @@ class NotificationService {
   NotificationCallback? onNotificationReceived;
   ErrorCallback? onError;
 
-  StreamSubscription? _notificationSubscription;
+  ReceivePort port = ReceivePort();
+  bool isInitialized = false;
+
+  // Callback estático para manejar notificaciones en background
+  @pragma('vm:entry-point')
+  static void _notificationCallback(NotificationEvent evt) {
+    print("Notificación recibida en background: $evt");
+    final SendPort? send =
+        IsolateNameServer.lookupPortByName("_notification_service_");
+    if (send == null) print("No se encontró el SendPort");
+    send?.send(evt);
+  }
 
   Future<void> initialize() async {
     try {
       print("NotificationService - Iniciando servicio...");
-      final isGranted = await NotificationListenerService.isPermissionGranted();
-      print("NotificationService - Permiso concedido: $isGranted");
 
-      if (!isGranted) {
-        print("NotificationService - Solicitando permiso...");
-        await NotificationListenerService.requestPermission();
+      if (isInitialized) {
+        print("NotificationService - Ya inicializado");
+        return;
       }
 
-      print("NotificationService - Configurando stream de notificaciones");
-      _notificationSubscription =
-          NotificationListenerService.notificationsStream.listen(
-        (event) {
-          print(
-              "NotificationService - Evento recibido: ${event.packageName} - ${event.content}");
-          _handleNotification(event);
-        },
-        onError: (error) {
-          print('NotificationService - Error en stream: $error');
-          onError?.call('Error al procesar notificaciones');
-        },
-      );
+      // Inicializar el listener con nuestro callback
+      await NotificationsListener.initialize(
+          callbackHandle: _notificationCallback);
+
+      // Configurar la comunicación entre isolates
+      IsolateNameServer.removePortNameMapping("_notification_service_");
+      IsolateNameServer.registerPortWithName(
+          port.sendPort, "_notification_service_");
+
+      // Escuchar las notificaciones
+      port.listen((message) {
+        if (message is NotificationEvent) {
+          _handleNotification(message);
+        }
+      });
+
+      final hasPermission = await NotificationsListener.hasPermission;
+      print("NotificationService - Permiso concedido: $hasPermission");
+
+      if (hasPermission != true) {
+        print("NotificationService - Solicitando permiso...");
+        await NotificationsListener.openPermissionSettings();
+      }
+
+      // Iniciar el servicio
+      final isRunning = await NotificationsListener.isRunning;
+      if (isRunning != true) {
+        await NotificationsListener.startService(
+            foreground: false,
+            title: "BiPe Alerta",
+            description: "Monitoreando notificaciones");
+      }
+
+      isInitialized = true;
       print("NotificationService - Inicialización completada");
     } catch (e) {
       print('NotificationService - Error en initialize: $e');
@@ -51,22 +82,14 @@ class NotificationService {
     }
   }
 
-  void _handleNotification(ServiceNotificationEvent event) async {
+  void _handleNotification(NotificationEvent event) async {
     try {
-      final content = event.content;
-      final idnotifacion = event.id;
-
-
-      // Verificamos si es un evento de eliminación
-    if (event.hasRemoved == true) {
-      print('Notificación eliminada: $content');
-      return;
-    }
-
+      final content = event.text;
+      final idnotifacion = "${event.uniqueId!}-${event.id}";
 
       print('Notification received: $content');
 
-      if (content == null || idnotifacion == null) {
+      if (content == null) {
         print('Notificación inválida: contenido o ID nulo');
         return;
       }
@@ -76,6 +99,11 @@ class NotificationService {
         if (content.contains(bipe.contain)) {
           onNotificationReceived?.call(content);
           await processMessage(content, idnotifacion, bipe);
+
+          // Limpiar la notificación después de procesarla
+          if (event.canTap == true) {
+            event.tap();
+          }
           break;
         }
       }
@@ -107,7 +135,7 @@ class NotificationService {
   }
 
   Future<void> processMessage(
-      String message, int idnotifacion, Bipe bipe) async {
+      String message, String idnotifacion, Bipe bipe) async {
     try {
       final userData = await _getUserData();
       if (userData == null) {
@@ -189,6 +217,9 @@ class NotificationService {
   }
 
   void dispose() {
-    _notificationSubscription?.cancel();
+    port.close();
+    IsolateNameServer.removePortNameMapping("_notification_service_");
+    NotificationsListener.stopService();
+    isInitialized = false;
   }
 }

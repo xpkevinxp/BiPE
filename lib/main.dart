@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:flutter_notification_listener/flutter_notification_listener.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Inicializar el listener de notificaciones
+  await NotificationsListener.initialize();
 
   // Inicializar el servicio en segundo plano
   FlutterForegroundTask.init(
@@ -29,11 +33,16 @@ void main() async {
     ),
   );
   
-  // Inicializar el puerto de comunicación como en el ejemplo
   FlutterForegroundTask.initCommunicationPort();
   
   final prefs = await SharedPreferences.getInstance();
   final token = prefs.getString('jwt_token');
+
+  // Verificar permisos de notificaciones
+  final hasPermission = await NotificationsListener.hasPermission;
+  if (!hasPermission!) {
+    await NotificationsListener.openPermissionSettings();
+  }
 
   runApp(MyApp(isLoggedIn: token != null));
 }

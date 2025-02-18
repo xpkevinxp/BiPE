@@ -21,3 +21,8 @@
 
 # Notification Listener
 -keep class com.pravera.notification_listener_service.** { *; }
+
+# Reglas mínimas para window
+-keep class androidx.window.core.** { *; }
+-keep class androidx.window.layout.** { *; }
+-dontwarn androidx.window.**
