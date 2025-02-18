@@ -61,9 +61,11 @@ android {
 }
 }
 dependencies {
-    def play_core_version = "1.10.3"
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.0.4'
-    implementation "com.google.android.play:core:$play_core_version"
+    
+    // Para mapping de tasks
+    implementation 'com.google.android.gms:play-services-tasks:18.0.2'
+    implementation 'com.google.android.play:feature-delivery:2.1.0'
 }
 flutter {
     source = "../.."

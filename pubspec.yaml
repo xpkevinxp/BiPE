@@ -44,6 +44,7 @@ dependencies:
   flutter_foreground_task: ^8.17.0
   animate_do: ^3.0.2
   url_launcher: ^6.1.14
+  flutter_local_notifications: ^18.0.1
   
 dev_dependencies:
   flutter_test:
