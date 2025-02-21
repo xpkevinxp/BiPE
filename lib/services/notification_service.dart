@@ -55,28 +55,34 @@ class NotificationService {
     try {
       final content = event.content;
       final idnotifacion = event.id;
-
+      final packageName = event.packageName;
 
       // Verificamos si es un evento de eliminación
-    if (event.hasRemoved == true) {
-      print('Notificación eliminada: $content');
-      return;
-    }
-
-
-      print('Notification received: $content');
-
-      if (content == null || idnotifacion == null) {
+      if (event.hasRemoved == true) {
+        print('Notificación eliminada: $content');
+        return;
+      }
+      if (content == null || idnotifacion == null || packageName == null) {
         print('Notificación inválida: contenido o ID nulo');
         return;
       }
 
+      print('Notificación recibida: $content');
+
       final bipes = await _authService.getBipes();
+
+      print(bipes);
+      print(packageName);
       for (var bipe in bipes) {
-        if (content.contains(bipe.contain)) {
-          onNotificationReceived?.call(content);
-          await processMessage(content, idnotifacion, bipe);
-          break;
+        print(bipe);
+        if (packageName == bipe.packageName || bipe.packageName == "-1") {
+          print('Entro en package');
+          if (content.contains(bipe.contain)) {
+            print('entro en contains');
+            onNotificationReceived?.call(content);
+            await processMessage(content, idnotifacion, bipe, packageName);
+            break;
+          }
         }
       }
     } catch (e) {
@@ -107,12 +113,14 @@ class NotificationService {
   }
 
   Future<void> processMessage(
-      String message, int idnotifacion, Bipe bipe) async {
+      String message, int idnotifacion, Bipe bipe, String packageName) async {
     try {
       final userData = await _getUserData();
       if (userData == null) {
         return;
       }
+
+      print('message');
 
       final RegExp regex = RegExp(bipe.regex);
       final match = regex.firstMatch(message);
@@ -125,18 +133,25 @@ class NotificationService {
       // Para Yape que tiene dos grupos (nombre y monto)
       final String nombreCliente =
           match.groupCount > 1 ? match.group(1)! : bipe.contain;
-      final String montoStr =
-          match.groupCount > 1 ? match.group(2)! : match.group(1)!;
+
+      // Manejo dinámico del monto
+      double monto = 0.0;
+      if (bipe.hasMonto) {
+        final String montoStr =
+            match.groupCount > 1 ? match.group(2)! : match.group(1)!;
+        monto = double.parse(montoStr);
+      }
 
       await sendToApi({
         'IdUsuarioNegocio': userData['idUsuario'],
         'IdNegocio': userData['idNegocio'],
         'NombreCliente': nombreCliente,
-        'Monto': double.parse(montoStr),
+        'Monto': monto,
         'Estado': "ACTIVO",
         'FechaHora': DateTime.now().toIso8601String(),
         'IdNotificationApp': idnotifacion,
-        'IdBilletera': bipe.idBilletera // Cambiamos 'Tipo' por 'IdBilletera'
+        'IdBilletera': bipe.idBilletera,
+        'PackageName': packageName
       });
     } catch (e) {
       print('Error procesando mensaje ${bipe.contain}: $e');

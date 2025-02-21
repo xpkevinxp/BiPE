@@ -88,6 +88,8 @@ class AuthService {
       // Guardar bipes
       final bipes = userData['bipes'];
       await prefs.setString(bipesKey, jsonEncode(bipes));
+
+      print(bipes);
     } catch (e) {
       print('Error guardando datos de usuario: $e');
       await _clearAllData();
@@ -140,6 +142,45 @@ class AuthService {
     }
   }
 
+  Future<void> migrateAndUpdateBipes() async {
+    try {
+      final token = await getToken();
+      print(token);
+      if (token == null) {
+        throw Exception('No se encontró token de autenticación');
+      }
+
+      final response = await http.get(
+        Uri.parse('$baseUrl/bipe'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json'
+        },
+      ).timeout(
+        const Duration(seconds: 30),
+        onTimeout: () => throw Exception('Tiempo de espera agotado'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['status']) {
+          // Actualizar solo los bipes
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(
+              bipesKey, jsonEncode(data['response']));
+        } else {
+          throw Exception('Error al obtener bipes actualizados');
+        }
+      } else {
+        print(response.body);
+        throw Exception('Error en el servidor');
+      }
+    } catch (e) {
+      print('Error en migración de bipes: $e');
+      rethrow;
+    }
+  }
+
   // Métodos de utilidad para obtener datos guardados
   Future<String?> getNombre() async {
     final prefs = await SharedPreferences.getInstance();
@@ -160,7 +201,7 @@ class AuthService {
     final prefs = await SharedPreferences.getInstance();
     final bipesString = prefs.getString(bipesKey);
     if (bipesString == null) return [];
-    
+
     final List<dynamic> bipesJson = jsonDecode(bipesString);
     return bipesJson.map((json) => Bipe.fromJson(json)).toList();
   }

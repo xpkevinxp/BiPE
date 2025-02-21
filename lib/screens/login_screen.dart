@@ -1,8 +1,8 @@
+import 'package:bipealerta/screens/register_screen.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:animate_do/animate_do.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
 import 'home_screen.dart';
 
@@ -60,22 +60,6 @@ class _LoginScreenState extends State<LoginScreen> {
         if (mounted) {
           setState(() => _isLoading = false);
         }
-      }
-    }
-  }
-
-  void _abrirWhatsApp() async {
-    final whatsappUrl = "https://wa.me/51901089996?text=Hola,%20quisiera%20registrarme%20en%20AlertaPagos";
-    if (await canLaunch(whatsappUrl)) {
-      await launch(whatsappUrl);
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('No se pudo abrir WhatsApp'),
-            backgroundColor: Colors.red,
-          ),
-        );
       }
     }
   }
@@ -247,7 +231,12 @@ class _LoginScreenState extends State<LoginScreen> {
                                   style: TextStyle(color: Colors.grey),
                                 ),
                                 GestureDetector(
-                                  onTap: _abrirWhatsApp,
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                                    );
+                                  },
                                   child: Text(
                                     "Regístrate aquí",
                                     style: TextStyle(

@@ -1,13 +1,13 @@
 import 'package:animate_do/animate_do.dart';
+import 'package:bipealerta/services/permissions_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
-import 'package:notification_listener_service/notification_listener_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'dart:io';
 import 'dart:async';
 import '../services/auth_service.dart';
 import '../services/background_service.dart';
+import '../services/permission_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -18,32 +18,50 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final AuthService _authService = AuthService();
+  final PermissionService _permissionService = PermissionService();
   final List<String> notifications = [];
   final ValueNotifier<Object?> _taskDataListenable = ValueNotifier(null);
   bool _isLoggingOut = false;
   bool _isLoading = true;
   String? _connectionMessage;
+  Map<String, bool> _permissions = {};
   var nombre = "";
   var nombreNegocio = "";
   var nombrePlan = "";
+  bool _isUpdating = false;
+  @override
+  void initState() {
+    super.initState();
+    FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
+    _checkPermissions();
+    _initializeApp();
+  }
 
-  Future<void> _requestPermissions() async {
-    final NotificationPermission notificationPermission =
-        await FlutterForegroundTask.checkNotificationPermission();
-    if (notificationPermission != NotificationPermission.granted) {
-      await FlutterForegroundTask.requestNotificationPermission();
+  Future<void> _checkPermissions() async {
+    final permissions = await _permissionService.checkAllPermissions();
+    if (mounted) {
+      setState(() {
+        _permissions = permissions;
+      });
+    }
+  }
+
+  Future<void> _handlePermissionRequest(String permission) async {
+    bool granted = false;
+    switch (permission) {
+      case 'notification':
+        granted = await _permissionService.requestNotificationPermission();
+        break;
+      case 'battery':
+        granted = await _permissionService.requestBatteryOptimization();
+        break;
+      case 'notificationListener':
+        granted = await _permissionService.requestNotificationListener();
+        break;
     }
 
-    if (Platform.isAndroid) {
-      if (!await FlutterForegroundTask.isIgnoringBatteryOptimizations) {
-        await FlutterForegroundTask.requestIgnoreBatteryOptimization();
-      }
-
-      // Agregar permiso para leer notificaciones
-      final isGranted = await NotificationListenerService.isPermissionGranted();
-      if (!isGranted) {
-        await NotificationListenerService.requestPermission();
-      }
+    if (granted && mounted) {
+      await _checkPermissions();
     }
   }
 
@@ -89,13 +107,9 @@ class _HomeScreenState extends State<HomeScreen> {
       if (receivedData.containsKey('type') &&
           receivedData['type'] == 'notification') {
         setState(() {
-          // Agregar la nueva notificación al inicio
-          notifications.insert(
-              0, '${DateTime.now()}: ${receivedData['message']}');
-
-          // Mantener solo las 10 más recientes
+          notifications.insert(0, '${DateTime.now()}: ${receivedData['message']}');
           if (notifications.length > 10) {
-            notifications.removeLast(); // Elimina la más antigua
+            notifications.removeLast();
           }
         });
       } else {
@@ -134,20 +148,56 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _initializeApp() async {
-    try {
-      await _requestPermissions();
-      await _startForegroundTask();
-      await _loadUserData();
-    } catch (e) {
-      print('Error en inicialización: $e');
-      _mostrarError('Error al iniciar la aplicación');
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+  Future<void> _handleUpdateBipes() async {
+  if (_isUpdating) return;
+  
+  setState(() {
+    _isUpdating = true;
+    _connectionMessage = 'Actualizando datos...';
+  });
+
+  try {
+    await _authService.migrateAndUpdateBipes();
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Datos actualizados correctamente'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  } catch (e) {
+    if (mounted) {
+      _mostrarError('Error al actualizar datos');
+    }
+  } finally {
+    if (mounted) {
+      setState(() {
+        _isUpdating = false;
+        _connectionMessage = 'Monitoreando notificaciones';
+      });
     }
   }
+}
+
+Future<void> _initializeApp() async {
+  try {
+    final bipes = await _authService.getBipes();
+    if (bipes.any((bipe) => bipe.packageName == '')) {
+      await _handleUpdateBipes();
+    }
+    
+    await _startForegroundTask();
+    await _loadUserData();
+  } catch (e) {
+    print('Error en inicialización: $e');
+    _mostrarError('Error al iniciar la aplicación');
+  } finally {
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
+}
 
   Future<void> _handleLogout({bool showError = true}) async {
     if (_isLoggingOut) return;
@@ -176,7 +226,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // Agregar estos métodos para el WhatsApp
   void _abrirWhatsAppSoporte() async {
     final whatsappUrl =
         "https://wa.me/51901089996?text=Hola,%20necesito%20soporte%20técnico";
@@ -209,13 +258,6 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
     }
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
-    _initializeApp();
   }
 
   @override
@@ -274,22 +316,36 @@ class _HomeScreenState extends State<HomeScreen> {
                       Row(
                         children: [
                           PopupMenuButton<String>(
-                            icon: const Icon(Icons.more_vert,
-                                color: Colors.white),
+                            icon: const Icon(Icons.more_vert, color: Colors.white),
                             onSelected: (value) {
-                              if (value == 'support') {
-                                _abrirWhatsAppSoporte();
-                              } else if (value == 'upgrade') {
-                                _abrirWhatsAppUpgrade();
+                              switch (value) {
+                                case 'support':
+                                  _abrirWhatsAppSoporte();
+                                  break;
+                                case 'upgrade':
+                                  _abrirWhatsAppUpgrade();
+                                  break;
+                                case 'update':
+                                  _handleUpdateBipes();
+                                  break;
                               }
                             },
                             itemBuilder: (BuildContext context) => [
                               const PopupMenuItem(
+                                value: 'update',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.sync, color: Colors.green),
+                                    SizedBox(width: 8),
+                                    Text('Actualizar Bipes'),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
                                 value: 'support',
                                 child: Row(
                                   children: [
-                                    Icon(Icons.support_agent,
-                                        color: Colors.green),
+                                    Icon(Icons.support_agent, color: Colors.green),
                                     SizedBox(width: 8),
                                     Text('Soporte'),
                                   ],
@@ -335,175 +391,196 @@ class _HomeScreenState extends State<HomeScreen> {
                         borderRadius: BorderRadius.only(
                             topLeft: Radius.circular(60),
                             topRight: Radius.circular(60))),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 30),
-                        // Tarjeta de información
-                        Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 20),
-                          padding: const EdgeInsets.all(20),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.green.shade100,
-                                blurRadius: 10,
-                                spreadRadius: 1,
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.business,
-                                color: Colors.green.shade400,
-                                size: 24,
-                              ),
-                              const SizedBox(width: 15),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      nombreNegocio,
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.green.shade900,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      nombre,
-                                      style: TextStyle(
-                                        color: Colors.grey.shade700,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: Colors.green.shade100,
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: Text(
-                                        nombrePlan,
-                                        style: TextStyle(
-                                          color: Colors.green.shade700,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        // Estado de conexión
-                        if (_connectionMessage != null)
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: [
+                          const SizedBox(height: 30),
+                          // Tarjeta de información
                           Container(
-                            margin: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
+                            margin: const EdgeInsets.symmetric(horizontal: 20),
+                            padding: const EdgeInsets.all(20),
                             decoration: BoxDecoration(
-                              color: Colors.green.shade50,
-                              borderRadius: BorderRadius.circular(12),
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.green.shade100,
+                                  blurRadius: 10,
+                                  spreadRadius: 1,
+                                ),
+                              ],
                             ),
                             child: Row(
-                              mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  Icons.check_circle,
+                                  Icons.business,
                                   color: Colors.green.shade400,
-                                  size: 20,
+                                  size: 24,
                                 ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  "Conectado",
-                                  style: TextStyle(
-                                    color: Colors.green.shade700,
-                                    fontWeight: FontWeight.w500,
+                                const SizedBox(width: 15),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        nombreNegocio,
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.green.shade900,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        nombre,
+                                        style: TextStyle(
+                                          color: Colors.grey.shade700,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.green.shade100,
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: Text(
+                                          nombrePlan,
+                                          style: TextStyle(
+                                            color: Colors.green.shade700,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ],
                             ),
                           ),
 
-                        const SizedBox(height: 20),
-                        // Título de notificaciones
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.notifications_none,
-                                color: Colors.grey.shade700,
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Últimas Notificaciones',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                  color: Colors.grey.shade800,
-                                ),
-                              ),
-                            ],
+                          // Widget de Permisos
+                          PermissionsWidget(
+                            permissions: _permissions,
+                            onRequestPermission: _handlePermissionRequest,
                           ),
-                        ),
 
-                        // Lista de notificaciones
-                        Expanded(
-                          child: notifications.isEmpty
-                              ? Center(
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        Icons.notifications_off_outlined,
-                                        size: 48,
-                                        color: Colors.grey.shade400,
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Text(
-                                        'No hay notificaciones',
-                                        style: TextStyle(
-                                          color: Colors.grey.shade600,
-                                          fontSize: 16,
-                                        ),
-                                      ),
-                                    ],
+                          // Estado de conexión
+                         if (_connectionMessage != null)
+                            Container(
+                              margin: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 8,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _connectionMessage!.toLowerCase().contains('desconectado') ||
+                                      _connectionMessage!.toLowerCase().contains('error')
+                                    ? Colors.red.shade50
+                                    : Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    _connectionMessage!.toLowerCase().contains('desconectado') ||
+                                    _connectionMessage!.toLowerCase().contains('error')
+                                        ? Icons.error_outline
+                                        : Icons.check_circle,
+                                    color: _connectionMessage!.toLowerCase().contains('desconectado') ||
+                                          _connectionMessage!.toLowerCase().contains('error')
+                                        ? Colors.red.shade400
+                                        : Colors.green.shade400,
+                                    size: 20,
                                   ),
-                                )
-                              : ListView.builder(
-                                  padding: const EdgeInsets.all(20),
-                                  itemCount: notifications.length,
-                                  itemBuilder: (context, index) {
-                                    return Card(
-                                      elevation: 0,
-                                      margin: const EdgeInsets.only(bottom: 12),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                      ),
-                                      child: ListTile(
-                                        title: Text(
-                                          notifications[index],
-                                          style: const TextStyle(fontSize: 14),
-                                        ),
-                                      ),
-                                    );
-                                  },
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    _connectionMessage!,
+                                    style: TextStyle(
+                                      color: _connectionMessage!.toLowerCase().contains('desconectado') ||
+                                            _connectionMessage!.toLowerCase().contains('error')
+                                          ? Colors.red.shade700
+                                          : Colors.green.shade700,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                         const SizedBox(height: 20),
+                          // Título de notificaciones
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.notifications_none,
+                                  color: Colors.grey.shade700,
                                 ),
-                        ),
-                      ],
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Últimas Notificaciones',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.grey.shade800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          // Lista de notificaciones
+                          Container(
+                            height: 300, // Altura fija para la lista
+                            child: notifications.isEmpty
+                                ? Center(
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.notifications_off_outlined,
+                                          size: 48,
+                                          color: Colors.grey.shade400,
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          'No hay notificaciones',
+                                          style: TextStyle(
+                                            color: Colors.grey.shade600,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                : ListView.builder(
+                                    padding: const EdgeInsets.all(20),
+                                    itemCount: notifications.length,
+                                    itemBuilder: (context, index) {
+                                      return Card(
+                                        elevation: 0,
+                                        margin: const EdgeInsets.only(bottom: 12),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(12),
+                                        ),
+                                        child: ListTile(
+                                          title: Text(
+                                            notifications[index],
+                                            style: const TextStyle(fontSize: 14),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),

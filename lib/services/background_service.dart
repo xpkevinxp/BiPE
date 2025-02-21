@@ -1,3 +1,4 @@
+import 'package:bipealerta/services/auth_service.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -26,14 +27,16 @@ class BiPeAlertTaskHandler extends TaskHandler {
     await flutterLocalNotificationsPlugin.cancelAll();
     const AndroidNotificationDetails androidNotificationDetails =
         AndroidNotificationDetails(
-          'bipe_alerts_channel', 
-          'BiPe Alertas',
-          channelDescription: 'Notificaciones sobre recordatorios programados para limpiar sus notificaciones',
-          importance: Importance.max,
-          priority: Priority.high,
-          ticker: 'BiPe',
-          icon: 'mipmap/ic_launcher',);
-        const NotificationDetails notificationDetails =
+      'bipe_alerts_channel',
+      'BiPe Alertas',
+      channelDescription:
+          'Notificaciones sobre recordatorios programados para limpiar sus notificaciones',
+      importance: Importance.max,
+      priority: Priority.high,
+      ticker: 'BiPe',
+      icon: 'mipmap/ic_launcher',
+    );
+    const NotificationDetails notificationDetails =
         NotificationDetails(android: androidNotificationDetails);
     await flutterLocalNotificationsPlugin.show(
         0,
@@ -47,6 +50,20 @@ class BiPeAlertTaskHandler extends TaskHandler {
   Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
     print('TaskHandler - iniciando servicios');
     try {
+      // Verificar y actualizar bipes si es necesario
+      try {
+        print('Verificando Bipes en onStart');
+        final AuthService authService = AuthService();
+        final bipes = await authService.getBipes();
+        if (bipes
+            .any((bipe) => bipe.packageName == '')) {
+          print('TaskHandler - Actualizando bipes...');
+          await authService.migrateAndUpdateBipes();
+          print('TaskHandler - Bipes actualizados');
+        }
+      } catch (e) {
+        print('TaskHandler - Error en onStart: $e');
+      }
       print('TaskHandler - inicializando NotificationService');
       // Asegurar que el servicio de notificaciones tenga los permisos
       final isGranted = await NotificationListenerService.isPermissionGranted();
@@ -93,13 +110,10 @@ class BiPeAlertTaskHandler extends TaskHandler {
     // Verificar que los servicios sigan activos
     print('Service is running - ${DateTime.now()}');
 
-    if(isFirst)
-    {
+    if (isFirst) {
       sendNotification();
       isFirst = false;
-    }
-    else
-    {
+    } else {
       if (DateTime.now().difference(lastNotificationTime).inMinutes >= 30) {
         sendNotification();
         lastNotificationTime = DateTime.now();

@@ -68,7 +68,7 @@ _isReconnecting = true;
         onConnectionStateChanged?.call(false, 'Desconectado');
         _manejarErrorConexion();
       });
-
+      print('Vamos a conectar');
       await hubConnection?.start();
       print('SignalR conectado exitosamente');
       isConnected = true;
