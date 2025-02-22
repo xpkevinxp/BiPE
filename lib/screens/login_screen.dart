@@ -73,9 +73,9 @@ class _LoginScreenState extends State<LoginScreen> {
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             colors: [
-              Colors.green.shade300,
-              Colors.green.shade200,
-              Colors.green.shade100,
+              Colors.green.shade600,
+              Colors.green.shade500,
+              Colors.green.shade400,
             ]
           )
         ),
@@ -194,7 +194,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               child: ElevatedButton(
                                 onPressed: _isLoading ? null : _login,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green.shade300,
+                                  backgroundColor: Colors.green.shade500,
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(50),
                                   ),
@@ -240,7 +240,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   child: Text(
                                     "Regístrate aquí",
                                     style: TextStyle(
-                                      color: Colors.green.shade300,
+                                      color: Colors.green.shade400,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),

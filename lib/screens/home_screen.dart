@@ -2,6 +2,7 @@ import 'package:animate_do/animate_do.dart';
 import 'package:bipealerta/services/permissions_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:in_app_update/in_app_update.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
@@ -65,6 +66,37 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  Future<void> checkForUpdate() async {
+  try {
+    final info = await InAppUpdate.checkForUpdate();
+    if (info.updateAvailability == UpdateAvailability.updateAvailable) {
+      await _stopForegroundTask();
+      final result = await InAppUpdate.performImmediateUpdate();
+      
+      if (result == AppUpdateResult.inAppUpdateFailed) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No se puede actualizar en este momento. Verifica el espacio de almacenamiento y la batería del dispositivo.'),
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
+      }
+    }
+  } catch (e) {
+    print('Error en actualización: $e');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No se puede actualizar en este momento. Inténtalo más tarde.'),
+          duration: Duration(seconds: 5),
+        ),
+      );
+    }
+  }
+}
+
   Future<void> _startForegroundTask() async {
     if (!await FlutterForegroundTask.isRunningService) {
       await FlutterForegroundTask.startService(
@@ -107,7 +139,8 @@ class _HomeScreenState extends State<HomeScreen> {
       if (receivedData.containsKey('type') &&
           receivedData['type'] == 'notification') {
         setState(() {
-          notifications.insert(0, '${DateTime.now()}: ${receivedData['message']}');
+          notifications.insert(
+              0, '${DateTime.now()}: ${receivedData['message']}');
           if (notifications.length > 10) {
             notifications.removeLast();
           }
@@ -149,55 +182,58 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _handleUpdateBipes() async {
-  if (_isUpdating) return;
-  
-  setState(() {
-    _isUpdating = true;
-    _connectionMessage = 'Actualizando datos...';
-  });
+    if (_isUpdating) return;
 
-  try {
-    await _authService.migrateAndUpdateBipes();
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Datos actualizados correctamente'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    }
-  } catch (e) {
-    if (mounted) {
-      _mostrarError('Error al actualizar datos');
-    }
-  } finally {
-    if (mounted) {
-      setState(() {
-        _isUpdating = false;
-        _connectionMessage = 'Monitoreando notificaciones';
-      });
+    setState(() {
+      _isUpdating = true;
+      _connectionMessage = 'Actualizando datos...';
+    });
+
+    try {
+      await _authService.migrateAndUpdateBipes();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Datos actualizados correctamente'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        _mostrarError('Error al actualizar datos');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isUpdating = false;
+          _connectionMessage = 'Monitoreando notificaciones';
+        });
+      }
     }
   }
-}
 
-Future<void> _initializeApp() async {
-  try {
-    final bipes = await _authService.getBipes();
-    if (bipes.any((bipe) => bipe.packageName == '')) {
-      await _handleUpdateBipes();
-    }
-    
-    await _startForegroundTask();
-    await _loadUserData();
-  } catch (e) {
-    print('Error en inicialización: $e');
-    _mostrarError('Error al iniciar la aplicación');
-  } finally {
-    if (mounted) {
-      setState(() => _isLoading = false);
+  Future<void> _initializeApp() async {
+    try {
+      // Primero verificar actualizaciones de la app
+      await checkForUpdate();
+
+      final bipes = await _authService.getBipes();
+      if (bipes.any((bipe) => bipe.packageName == '')) {
+        await _handleUpdateBipes();
+      }
+
+      await _startForegroundTask();
+      await _loadUserData();
+    } catch (e) {
+      print('Error en inicialización: $e');
+      _mostrarError('Error al iniciar la aplicación');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
-}
 
   Future<void> _handleLogout({bool showError = true}) async {
     if (_isLoggingOut) return;
@@ -227,15 +263,27 @@ Future<void> _initializeApp() async {
   }
 
   void _abrirWhatsAppSoporte() async {
-    final whatsappUrl =
-        "https://wa.me/51901089996?text=Hola,%20necesito%20soporte%20técnico";
-    if (await canLaunch(whatsappUrl)) {
-      await launch(whatsappUrl);
-    } else {
+    final whatsappUri = Uri.parse(
+        "https://wa.me/51901089996?text=Hola,%20necesito%20soporte%20técnico");
+
+    try {
+      if (await canLaunchUrl(whatsappUri)) {
+        await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No se pudo abrir WhatsApp'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('No se pudo abrir WhatsApp'),
+            content: Text('Error al abrir WhatsApp'),
             backgroundColor: Colors.red,
           ),
         );
@@ -244,15 +292,27 @@ Future<void> _initializeApp() async {
   }
 
   void _abrirWhatsAppUpgrade() async {
-    final whatsappUrl =
-        "https://wa.me/51901089996?text=Hola,%20quisiera%20información%20sobre%20los%20planes%20premium";
-    if (await canLaunch(whatsappUrl)) {
-      await launch(whatsappUrl);
-    } else {
+    final whatsappUri = Uri.parse(
+        "https://wa.me/51901089996?text=Hola,%20quisiera%20información%20sobre%20los%20planes%20premium");
+
+    try {
+      if (await canLaunchUrl(whatsappUri)) {
+        await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No se pudo abrir WhatsApp'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('No se pudo abrir WhatsApp'),
+            content: Text('Error al abrir WhatsApp'),
             backgroundColor: Colors.red,
           ),
         );
@@ -278,9 +338,9 @@ Future<void> _initializeApp() async {
             width: double.infinity,
             decoration: BoxDecoration(
                 gradient: LinearGradient(begin: Alignment.topCenter, colors: [
-              Colors.green.shade300,
-              Colors.green.shade200,
-              Colors.green.shade100,
+              Colors.green.shade600,
+              Colors.green.shade500,
+              Colors.green.shade400,
             ])),
             child: Column(
               children: [
@@ -316,7 +376,8 @@ Future<void> _initializeApp() async {
                       Row(
                         children: [
                           PopupMenuButton<String>(
-                            icon: const Icon(Icons.more_vert, color: Colors.white),
+                            icon: const Icon(Icons.more_vert,
+                                color: Colors.white),
                             onSelected: (value) {
                               switch (value) {
                                 case 'support':
@@ -345,7 +406,8 @@ Future<void> _initializeApp() async {
                                 value: 'support',
                                 child: Row(
                                   children: [
-                                    Icon(Icons.support_agent, color: Colors.green),
+                                    Icon(Icons.support_agent,
+                                        color: Colors.green),
                                     SizedBox(width: 8),
                                     Text('Soporte'),
                                   ],
@@ -420,7 +482,8 @@ Future<void> _initializeApp() async {
                                 const SizedBox(width: 15),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         nombreNegocio,
@@ -445,7 +508,8 @@ Future<void> _initializeApp() async {
                                         ),
                                         decoration: BoxDecoration(
                                           color: Colors.green.shade100,
-                                          borderRadius: BorderRadius.circular(12),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
                                         ),
                                         child: Text(
                                           nombrePlan,
@@ -469,7 +533,7 @@ Future<void> _initializeApp() async {
                           ),
 
                           // Estado de conexión
-                         if (_connectionMessage != null)
+                          if (_connectionMessage != null)
                             Container(
                               margin: const EdgeInsets.fromLTRB(20, 20, 20, 0),
                               padding: const EdgeInsets.symmetric(
@@ -477,8 +541,12 @@ Future<void> _initializeApp() async {
                                 vertical: 8,
                               ),
                               decoration: BoxDecoration(
-                                color: _connectionMessage!.toLowerCase().contains('desconectado') ||
-                                      _connectionMessage!.toLowerCase().contains('error')
+                                color: _connectionMessage!
+                                            .toLowerCase()
+                                            .contains('desconectado') ||
+                                        _connectionMessage!
+                                            .toLowerCase()
+                                            .contains('error')
                                     ? Colors.red.shade50
                                     : Colors.green.shade50,
                                 borderRadius: BorderRadius.circular(12),
@@ -487,12 +555,20 @@ Future<void> _initializeApp() async {
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
                                   Icon(
-                                    _connectionMessage!.toLowerCase().contains('desconectado') ||
-                                    _connectionMessage!.toLowerCase().contains('error')
+                                    _connectionMessage!
+                                                .toLowerCase()
+                                                .contains('desconectado') ||
+                                            _connectionMessage!
+                                                .toLowerCase()
+                                                .contains('error')
                                         ? Icons.error_outline
                                         : Icons.check_circle,
-                                    color: _connectionMessage!.toLowerCase().contains('desconectado') ||
-                                          _connectionMessage!.toLowerCase().contains('error')
+                                    color: _connectionMessage!
+                                                .toLowerCase()
+                                                .contains('desconectado') ||
+                                            _connectionMessage!
+                                                .toLowerCase()
+                                                .contains('error')
                                         ? Colors.red.shade400
                                         : Colors.green.shade400,
                                     size: 20,
@@ -501,8 +577,12 @@ Future<void> _initializeApp() async {
                                   Text(
                                     _connectionMessage!,
                                     style: TextStyle(
-                                      color: _connectionMessage!.toLowerCase().contains('desconectado') ||
-                                            _connectionMessage!.toLowerCase().contains('error')
+                                      color: _connectionMessage!
+                                                  .toLowerCase()
+                                                  .contains('desconectado') ||
+                                              _connectionMessage!
+                                                  .toLowerCase()
+                                                  .contains('error')
                                           ? Colors.red.shade700
                                           : Colors.green.shade700,
                                       fontWeight: FontWeight.w500,
@@ -512,7 +592,7 @@ Future<void> _initializeApp() async {
                               ),
                             ),
 
-                         const SizedBox(height: 20),
+                          const SizedBox(height: 20),
                           // Título de notificaciones
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -541,7 +621,8 @@ Future<void> _initializeApp() async {
                             child: notifications.isEmpty
                                 ? Center(
                                     child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
                                       children: [
                                         Icon(
                                           Icons.notifications_off_outlined,
@@ -565,14 +646,17 @@ Future<void> _initializeApp() async {
                                     itemBuilder: (context, index) {
                                       return Card(
                                         elevation: 0,
-                                        margin: const EdgeInsets.only(bottom: 12),
+                                        margin:
+                                            const EdgeInsets.only(bottom: 12),
                                         shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(12),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
                                         ),
                                         child: ListTile(
                                           title: Text(
                                             notifications[index],
-                                            style: const TextStyle(fontSize: 14),
+                                            style:
+                                                const TextStyle(fontSize: 14),
                                           ),
                                         ),
                                       );

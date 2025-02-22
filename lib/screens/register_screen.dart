@@ -145,9 +145,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         width: double.infinity,
         decoration: BoxDecoration(
             gradient: LinearGradient(begin: Alignment.topCenter, colors: [
-          Colors.green.shade300,
-          Colors.green.shade200,
-          Colors.green.shade100,
+          Colors.green.shade600,
+          Colors.green.shade500,
+          Colors.green.shade400,
         ])),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -226,7 +226,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                           ? _handleFirstStep
                                           : _handleSecondStep),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.green.shade300,
+                                    backgroundColor: Colors.green.shade500,
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(50),
                                     ),
