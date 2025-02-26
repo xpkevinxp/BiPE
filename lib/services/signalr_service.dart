@@ -10,8 +10,8 @@ class SignalRService {
   
   SignalRService._internal();
   static const String hubUrl = 'https://apialert.c-centralizador.com/dispositivohub';
-  static const int reconnectDelay = 10;
-  static const int heartbeatInterval = 15;
+  static const int reconnectDelay = 5;
+  static const int heartbeatInterval = 30;
 
   StreamSubscription? _connectivitySubscription;
   HubConnection? hubConnection;
@@ -23,70 +23,176 @@ class SignalRService {
   int _reconnectAttempts = 0;
   static const int maxReconnectAttempts = 20;
   bool _isReconnecting = false;
+  bool _isConnecting = false; // Agregar esta variable
 
   Function(bool isConnected, String message)? onConnectionStateChanged;
 
   Future<void> iniciarConexion(String idNegocio, String idUsuario) async {
-    if (_isReconnecting) return;
+    if (_isReconnecting || _isConnecting) return;
     
     print('Iniciando conexión SignalR - idNegocio: $idNegocio, idUsuario: $idUsuario');
     
-    _idNegocio = idNegocio;
-    _idUsuario = idUsuario;
-    _reconnectAttempts = 0;
-    
     try {
-      if (idNegocio.isEmpty || idUsuario.isEmpty) {
-  throw ArgumentError('idNegocio y idUsuario no pueden estar vacíos');
-}
-_isReconnecting = true;
-      await _limpiarConexionExistente();
-      
-      hubConnection = HubConnectionBuilder()
-    .withUrl(hubUrl)
-    .withAutomaticReconnect(retryDelays: [])  // Deshabilitar reconexión automática
-    .build();
+        if (idNegocio.isEmpty || idUsuario.isEmpty) {
+            throw ArgumentError('idNegocio y idUsuario no pueden estar vacíos');
+        }
 
-      hubConnection?.onreconnecting(({error}) {
-        print('SignalR reconectando - error: $error');
-        isConnected = false;
-        onConnectionStateChanged?.call(false, 'Intentando reconectar...');
-      });
-
-      hubConnection?.onreconnected(({connectionId}) async {
-        print('SignalR reconectado - connectionId: $connectionId');
-        isConnected = true;
+        _isConnecting = true;
+        _isReconnecting = true;
+        _idNegocio = idNegocio;
+        _idUsuario = idUsuario;
         _reconnectAttempts = 0;
-        _reconnectionTimer?.cancel();
-        onConnectionStateChanged?.call(true, 'Conectado');
-        await _actualizarEstadoSeguro(true);
-      });
-
-      hubConnection?.onclose(({error}) {
-        print('SignalR cerrado - error: $error');
-        isConnected = false;
-        onConnectionStateChanged?.call(false, 'Desconectado');
-        _manejarErrorConexion();
-      });
-      print('Vamos a conectar');
-      await hubConnection?.start();
-      print('SignalR conectado exitosamente');
-      isConnected = true;
-      _reconnectionTimer?.cancel();
-      onConnectionStateChanged?.call(true, 'Conectado');
-      await _actualizarEstadoSeguro(true);
-      _startHeartbeat();
-      
+        
+        await _limpiarConexionExistente();
+        
+        await _configurarConexion();
+        await _iniciarConexion();
+        
     } catch (e) {
-      print('Error iniciando conexión SignalR: $e');
-      isConnected = false;
-      onConnectionStateChanged?.call(false, 'Error de conexión');
-      await _manejarErrorConexion();
-    }
-    finally {
+        print('Error iniciando conexión SignalR: $e');
+        isConnected = false;
+        onConnectionStateChanged?.call(false, 'Error de conexión');
+        await _manejarErrorConexion();
+    } finally {
         _isReconnecting = false;
+        _isConnecting = false;
     }
-  }
+}
+
+Future<void> _iniciarConexion() async {
+    try {
+        print('Iniciando conexión al hub...');
+        await hubConnection?.start();
+        
+        if (hubConnection?.state == HubConnectionState.Connected) {
+            print('SignalR conectado exitosamente');
+            isConnected = true;
+            _reconnectionTimer?.cancel();
+            onConnectionStateChanged?.call(true, 'Conectado');
+            await _actualizarEstadoSeguro(true);
+            _startHeartbeat();
+        } else {
+            throw Exception('No se pudo establecer la conexión');
+        }
+    } catch (e) {
+        print('Error en _iniciarConexion: $e');
+        isConnected = false;
+        onConnectionStateChanged?.call(false, 'Error de conexión');
+        throw Exception('Error al iniciar conexión: $e');
+    }
+}
+
+Future<void> _configurarConexion() async {
+  hubConnection = HubConnectionBuilder()
+      .withUrl(
+        hubUrl,
+        options: HttpConnectionOptions(
+          skipNegotiation: true,  // Evita la fase de negociación
+          transport: HttpTransportType.WebSockets,  // Fuerza WebSockets
+        ),
+      )
+      .withAutomaticReconnect(retryDelays: [
+        0,      // Primer intento inmediato
+        2000,   // 2 segundos
+        5000,   // 5 segundos
+        10000,  // 10 segundos
+        30000,  // 30 segundos
+      ])
+      .build();
+    
+   // Configurar timeouts después de build
+  hubConnection?.keepAliveIntervalInMilliseconds = 30000;
+  hubConnection?.serverTimeoutInMilliseconds = 90000;
+
+  hubConnection?.onreconnecting(({error}) {
+    _manejarReconectando(error);
+  });
+
+  hubConnection?.onreconnected(({connectionId}) async {
+    await _manejarReconectado(connectionId);
+  });
+
+  hubConnection?.onclose(({error}) {
+    _manejarCierre(error);
+  });
+}
+
+void _manejarReconectando(dynamic error) {
+    print('SignalR reconectando - error: $error');
+    isConnected = false;
+    onConnectionStateChanged?.call(false, 'Intentando reconectar...');
+}
+
+Future<void> _manejarReconectado(String? connectionId) async {
+    print('SignalR reconectado - connectionId: $connectionId');
+    isConnected = true;
+    _reconnectAttempts = 0;
+    _reconnectionTimer?.cancel();
+    onConnectionStateChanged?.call(true, 'Conectado');
+    await _actualizarEstadoSeguro(true);
+}
+
+void _manejarCierre(dynamic error) {
+    print('SignalR cerrado - error: $error');
+    isConnected = false;
+    onConnectionStateChanged?.call(false, 'Desconectado');
+    _manejarErrorConexion();
+}
+
+void _startHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _failedHeartbeats = 0;
+    
+    _heartbeatTimer = Timer.periodic(
+        const Duration(seconds: heartbeatInterval), 
+        _handleHeartbeat
+    );
+}
+
+Future<void> _handleHeartbeat(Timer timer) async {
+    if (!isConnected) {
+        timer.cancel();
+        return;
+    }
+
+    try {
+        await _actualizarEstadoSeguro(true);
+        _failedHeartbeats = 0;
+    } catch (e) {
+        _failedHeartbeats++;
+        print('Error en heartbeat #$_failedHeartbeats: $e');
+        if (_failedHeartbeats >= 3) {
+            timer.cancel();
+            await _manejarErrorConexion();
+        }
+    }
+}
+
+Future<void> actualizarEstado(String idNegocio, String idUsuario, bool estaActivo) async {
+    if (hubConnection?.state != HubConnectionState.Connected) {
+        throw Exception('No hay conexión activa');
+    }
+
+    try {
+        await hubConnection?.invoke(
+            'ActualizarEstadoDispositivo', 
+            args: [idNegocio, idUsuario, estaActivo]
+        ).timeout(
+            const Duration(seconds: 8),
+            onTimeout: () {
+                throw TimeoutException('Timeout al actualizar estado');
+            }
+        );
+    } catch (e) {
+        if (e is TimeoutException) {
+            print('Timeout al actualizar estado');
+        } else {
+            print('Error al actualizar estado: $e');
+        }
+        await _manejarErrorConexion();
+        rethrow;
+    }
+}
 
   Future<void> _limpiarConexionExistente() async {
     _reconnectionTimer?.cancel();
@@ -151,45 +257,8 @@ Future<void> _actualizarEstadoSeguro(bool estado) async {
     }
 }
 
-  Future<void> actualizarEstado(String idNegocio, String idUsuario, bool estaActivo) async {
-    if (hubConnection?.state != HubConnectionState.Connected) {
-      throw Exception('No hay conexión activa');
-    }
-
-    try {
-      await hubConnection?.invoke('ActualizarEstadoDispositivo', 
-        args: [idNegocio, idUsuario, estaActivo])
-        .timeout(const Duration(seconds: 8));
-    } on TimeoutException {
-      print('Timeout al actualizar estado');
-      await _manejarErrorConexion();
-      rethrow;
-    } catch (e) {
-      print('Error al actualizar estado: $e');
-      await _manejarErrorConexion();
-      rethrow;
-    }
-  }
-
 int _failedHeartbeats = 0; // Propiedad de clase
 
-void _startHeartbeat() {
-    _heartbeatTimer?.cancel();
-    _failedHeartbeats = 0;
-    
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: heartbeatInterval), (timer) async {
-        try {
-            await _actualizarEstadoSeguro(true);
-            _failedHeartbeats = 0;
-        } catch (e) {
-            _failedHeartbeats++;
-            if (_failedHeartbeats >= 3) {
-                timer.cancel();
-                await _manejarErrorConexion();
-            }
-        }
-    });
-}
 
   Future<void> detenerConexion() async {
     try {

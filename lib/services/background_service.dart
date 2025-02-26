@@ -18,32 +18,36 @@ class BiPeAlertTaskHandler extends TaskHandler {
   final SignalRService _signalRService = SignalRService();
   bool isFirst = true;
   DateTime lastNotificationTime = DateTime.now();
-
+  final AuthService authService = AuthService();
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
   Future<void> sendNotification() async {
-    print("Entrando a dar notificaciones");
-    await flutterLocalNotificationsPlugin.cancelAll();
-    const AndroidNotificationDetails androidNotificationDetails =
-        AndroidNotificationDetails(
-      'bipe_alerts_channel',
-      'BiPe Alertas',
-      channelDescription:
-          'Notificaciones sobre recordatorios programados para limpiar sus notificaciones',
-      importance: Importance.max,
-      priority: Priority.high,
-      ticker: 'BiPe',
-      icon: 'mipmap/ic_launcher',
-    );
-    const NotificationDetails notificationDetails =
-        NotificationDetails(android: androidNotificationDetails);
-    await flutterLocalNotificationsPlugin.show(
-        0,
-        'BiPe Alerta',
-        'Recuerda limpiar tus notificaciones y asi evitar problemas con el aplicativo',
-        notificationDetails,
-        payload: 'item x');
+    try {
+      print("Entrando a dar notificaciones");
+      await flutterLocalNotificationsPlugin.cancelAll();
+      const AndroidNotificationDetails androidNotificationDetails =
+          AndroidNotificationDetails(
+        'bipe_alerts_channel',
+        'BiPe Alertas',
+        channelDescription:
+            'Notificaciones sobre recordatorios programados para limpiar sus notificaciones',
+        importance: Importance.max,
+        priority: Priority.high,
+        ticker: 'BiPe',
+        icon: 'mipmap/ic_launcher',
+      );
+      const NotificationDetails notificationDetails =
+          NotificationDetails(android: androidNotificationDetails);
+      await flutterLocalNotificationsPlugin.show(
+          0,
+          'BiPe Alerta',
+          'Recuerda limpiar tus notificaciones y asi evitar problemas con el aplicativo',
+          notificationDetails,
+          payload: 'item x');
+    } catch (e) {
+      print('Error enviando notificación: $e');
+    }
   }
 
   @override
@@ -53,27 +57,21 @@ class BiPeAlertTaskHandler extends TaskHandler {
       // Verificar y actualizar bipes si es necesario
       try {
         print('Verificando Bipes en onStart');
-        final AuthService authService = AuthService();
-        final bipes = await authService.getBipes();
-        if (bipes
-            .any((bipe) => bipe.packageName == '')) {
-          print('TaskHandler - Actualizando bipes...');
-          await authService.migrateAndUpdateBipes();
-          print('TaskHandler - Bipes actualizados');
-        }
+        
+        await authService.migrateAndUpdateBipes();
       } catch (e) {
-        print('TaskHandler - Error en onStart: $e');
+        print('TaskHandler - Error actualizando bipes: $e');
       }
+
       print('TaskHandler - inicializando NotificationService');
-      // Asegurar que el servicio de notificaciones tenga los permisos
       final isGranted = await NotificationListenerService.isPermissionGranted();
       if (!isGranted) {
         print('TaskHandler - solicitando permisos de notificación');
         await NotificationListenerService.requestPermission();
       }
 
-      // Inicializar el servicio de notificaciones
       await _notificationService.initialize();
+      await _notificationService.debugBipesStatus();
       print('TaskHandler - NotificationService inicializado');
 
       final prefs = await SharedPreferences.getInstance();
@@ -81,51 +79,60 @@ class BiPeAlertTaskHandler extends TaskHandler {
       final idUsuario = prefs.getInt('idUsuario')?.toString();
 
       if (idNegocio != null && idUsuario != null) {
-        // Configurar callbacks
-        _notificationService.onNotificationReceived = (message) {
-          print('TaskHandler - Notificación recibida: $message');
-          FlutterForegroundTask.sendDataToMain(
-              {'type': 'notification', 'message': message});
-        };
-
-        _signalRService.onConnectionStateChanged = (isConnected, message) {
-          print('TaskHandler - Estado SignalR: $isConnected, $message');
-          FlutterForegroundTask.updateService(
-            notificationTitle: 'BiPe Alerta',
-            notificationText: message,
-          );
-          FlutterForegroundTask.sendDataToMain(
-              {'isConnected': isConnected, 'message': message});
-        };
-
+        _configureCallbacks();
         await _signalRService.iniciarConexion(idNegocio, idUsuario);
+      } else {
+        print('TaskHandler - ID de negocio o usuario no encontrado');
       }
     } catch (e) {
       print('TaskHandler - Error en onStart: $e');
     }
   }
 
+  void _configureCallbacks() {
+    _notificationService.onNotificationReceived = (message) {
+      print('TaskHandler - Notificación recibida: $message');
+      FlutterForegroundTask.sendDataToMain(
+          {'type': 'notification', 'message': message});
+    };
+
+    _signalRService.onConnectionStateChanged = (isConnected, message) {
+      print('TaskHandler - Estado SignalR: $isConnected, $message');
+      FlutterForegroundTask.updateService(
+        notificationTitle: 'BiPe Alerta',
+        notificationText: message,
+      );
+      FlutterForegroundTask.sendDataToMain(
+          {'isConnected': isConnected, 'message': message});
+    };
+  }
+
   @override
-  void onRepeatEvent(DateTime timestamp) {
-    // Verificar que los servicios sigan activos
+  Future<void> onRepeatEvent(DateTime timestamp) async {
     print('Service is running - ${DateTime.now()}');
 
-    if (isFirst) {
-      sendNotification();
-      isFirst = false;
-    } else {
-      if (DateTime.now().difference(lastNotificationTime).inMinutes >= 30) {
-        sendNotification();
+    try {
+      if (isFirst) {
+        await sendNotification();
+        isFirst = false;
+      } else if (DateTime.now().difference(lastNotificationTime).inMinutes >= 30) {
+        await sendNotification();
         lastNotificationTime = DateTime.now();
       }
+    } catch (e) {
+      print('Error en onRepeatEvent: $e');
     }
   }
 
   @override
   Future<void> onDestroy(DateTime timestamp) async {
     print('onDestroy');
-    await _signalRService.detenerConexion();
-    _notificationService.dispose();
+    try {
+      await _signalRService.detenerConexion();
+      await _notificationService.dispose();
+    } catch (e) {
+      print('Error en onDestroy: $e');
+    }
   }
 
   @override
@@ -139,13 +146,36 @@ class BiPeAlertTaskHandler extends TaskHandler {
   }
 
   @override
-  void onReceiveData(Object data) {
+Future<void> onReceiveData(Object data) async {
+  try {
     if (data == 'getStatus') {
-      // Enviamos el estado actual a la UI
       FlutterForegroundTask.sendDataToMain({
         'isConnected': _signalRService.isConnected,
         'message': _signalRService.isConnected ? 'Conectado' : 'Desconectado'
       });
+    } 
+    else if (data is Map<String, dynamic> && data['action'] == 'updateBipes') {
+      print('Actualizando bipes en el servicio en segundo plano');
+      try {
+        await authService.migrateAndUpdateBipes();
+
+         // Reiniciar el servicio de notificaciones
+        await _notificationService.dispose();
+        await _notificationService.initialize();
+        await _notificationService.debugBipesStatus();
+        // Confirmar que los bipes se actualizaron correctamente
+        FlutterForegroundTask.sendDataToMain({
+          'message': 'Bipes actualizados y servicio reiniciado'
+        });
+      } catch (e) {
+        print('Error actualizando bipes en servicio: $e');
+        FlutterForegroundTask.sendDataToMain({
+          'message': 'Error actualizando bipes en servicio'
+        });
+      }
     }
+  } catch (e) {
+    print('Error en onReceiveData: $e');
   }
+}
 }

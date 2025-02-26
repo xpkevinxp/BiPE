@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:showcaseview/showcaseview.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
 
@@ -25,11 +26,15 @@ void main() async {
       channelName: 'BiPeAlerta Service',
       channelDescription: 'Servicio de monitoreo de BiPe',
       onlyAlertOnce: true,
+      showWhen: false, // No muestra la hora
+      enableVibration: false, // Deshabilita la vibración
+      playSound: false, // Deshabilita el sonido
       visibility: NotificationVisibility.VISIBILITY_PUBLIC,
+      priority: NotificationPriority.LOW, // Prioridad baja para no molestar al usuario
     ),
     iosNotificationOptions: const IOSNotificationOptions(
-      showNotification: true,
-      playSound: false,
+        showNotification: false,
+        playSound: false,
     ),
     foregroundTaskOptions: ForegroundTaskOptions(
       eventAction: ForegroundTaskEventAction.repeat(5000),
@@ -40,13 +45,21 @@ void main() async {
     ),
   );
   
-  // Inicializar el puerto de comunicación como en el ejemplo
+  // Inicializar el puerto de comunicación
   FlutterForegroundTask.initCommunicationPort();
   
   final prefs = await SharedPreferences.getInstance();
   final token = prefs.getString('jwt_token');
 
-  runApp(MyApp(isLoggedIn: token != null));
+  runApp(ShowCaseWidget(
+    builder: (context) => MyApp(isLoggedIn: token != null),
+    autoPlay: false,
+    autoPlayDelay: const Duration(seconds: 3),
+    onComplete: (index, key) {
+      print('Showcase completado: índice $index, key $key');
+      // No podemos acceder a los elementos de HomeScreen aquí
+    },
+  ));
 }
 
 class MyApp extends StatelessWidget {
@@ -61,7 +74,6 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
         useMaterial3: true,
-        // Configuraciones adicionales para edge-to-edge
         appBarTheme: const AppBarTheme(
           systemOverlayStyle: SystemUiOverlayStyle.light,
           backgroundColor: Colors.transparent,

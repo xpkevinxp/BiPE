@@ -1,9 +1,12 @@
 import 'package:animate_do/animate_do.dart';
+import 'package:bipealerta/services/device_helper.dart';
 import 'package:bipealerta/services/permissions_widget.dart';
+import 'package:bipealerta/widgets/xiaomiguide_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:in_app_update/in_app_update.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:showcaseview/showcaseview.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import '../services/auth_service.dart';
@@ -18,6 +21,13 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // Añadir GlobalKeys para cada elemento que queremos mostrar en el tutorial
+  final GlobalKey _negocioShowcaseKey = GlobalKey();
+  final GlobalKey _permisosShowcaseKey = GlobalKey();
+  final GlobalKey _notificacionesShowcaseKey = GlobalKey();
+  final GlobalKey _menuOpcionesShowcaseKey = GlobalKey();
+  final GlobalKey _cerrarSesionShowcaseKey = GlobalKey();
+
   final AuthService _authService = AuthService();
   final PermissionService _permissionService = PermissionService();
   final List<String> notifications = [];
@@ -30,12 +40,51 @@ class _HomeScreenState extends State<HomeScreen> {
   var nombreNegocio = "";
   var nombrePlan = "";
   bool _isUpdating = false;
+
   @override
-  void initState() {
-    super.initState();
-    FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
-    _checkPermissions();
-    _initializeApp();
+void initState() {
+  super.initState();
+  FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
+  _checkPermissions();
+  _initializeApp();
+  
+  
+  // Iniciar el tutorial después de que la pantalla esté cargada
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    _startTutorialIfNeeded();
+  });
+}
+
+
+  Future<void> _startTutorialIfNeeded() async {
+  final prefs = await SharedPreferences.getInstance();
+  bool tutorialShown = prefs.getBool('tutorial_shown') ?? false;
+  
+  if (!tutorialShown && mounted) {
+    await Future.delayed(const Duration(milliseconds: 500));
+    
+    ShowCaseWidget.of(context).startShowCase([
+      _negocioShowcaseKey,
+      _permisosShowcaseKey,
+      _notificacionesShowcaseKey,
+      _menuOpcionesShowcaseKey,
+      _cerrarSesionShowcaseKey,
+    ]);
+    
+    // Marcar que el tutorial ya se mostró
+    await prefs.setBool('tutorial_shown', true);
+  }
+}
+  
+  // Implementar un método para iniciar el tutorial manualmente
+  void _reiniciarTutorial() {
+    ShowCaseWidget.of(context).startShowCase([
+      _negocioShowcaseKey,
+      _permisosShowcaseKey,
+      _notificacionesShowcaseKey,
+      _menuOpcionesShowcaseKey,
+      _cerrarSesionShowcaseKey,
+    ]);
   }
 
   Future<void> _checkPermissions() async {
@@ -58,6 +107,7 @@ class _HomeScreenState extends State<HomeScreen> {
         break;
       case 'notificationListener':
         granted = await _permissionService.requestNotificationListener();
+        _checkXiaomiDevice();
         break;
     }
 
@@ -67,35 +117,35 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> checkForUpdate() async {
-  try {
-    final info = await InAppUpdate.checkForUpdate();
-    if (info.updateAvailability == UpdateAvailability.updateAvailable) {
-      await _stopForegroundTask();
-      final result = await InAppUpdate.performImmediateUpdate();
-      
-      if (result == AppUpdateResult.inAppUpdateFailed) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('No se puede actualizar en este momento. Verifica el espacio de almacenamiento y la batería del dispositivo.'),
-              duration: Duration(seconds: 5),
-            ),
-          );
+    try {
+      final info = await InAppUpdate.checkForUpdate();
+      if (info.updateAvailability == UpdateAvailability.updateAvailable) {
+        await _stopForegroundTask();
+        final result = await InAppUpdate.performImmediateUpdate();
+        
+        if (result == AppUpdateResult.inAppUpdateFailed) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('No se puede actualizar en este momento. Verifica el espacio de almacenamiento y la batería del dispositivo.'),
+                duration: Duration(seconds: 5),
+              ),
+            );
+          }
         }
       }
-    }
-  } catch (e) {
-    print('Error en actualización: $e');
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No se puede actualizar en este momento. Inténtalo más tarde.'),
-          duration: Duration(seconds: 5),
-        ),
-      );
+    } catch (e) {
+      print('Error en actualización: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No se puede actualizar en este momento. Inténtalo más tarde.'),
+            duration: Duration(seconds: 5),
+          ),
+        );
+      }
     }
   }
-}
 
   Future<void> _startForegroundTask() async {
     if (!await FlutterForegroundTask.isRunningService) {
@@ -191,6 +241,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       await _authService.migrateAndUpdateBipes();
+      
+      // Notificar al servicio en segundo plano
+      FlutterForegroundTask.sendDataToTask({'action': 'updateBipes'});
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -259,6 +313,34 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         setState(() => _isLoggingOut = false);
       }
+    }
+  }
+
+  Future<void> _checkXiaomiDevice() async {
+    try {
+      bool isXiaomi = await DeviceHelper.isXiaomiDevice();
+      
+      if (isXiaomi && mounted) {
+        // Esperar a que la pantalla esté completamente cargada
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          // Verificar si el diálogo ya se ha mostrado antes
+          SharedPreferences.getInstance().then((prefs) {
+            bool? dialogShown = prefs.getBool('xiaomi_dialog_shown');
+            
+            if (dialogShown != true) {
+              showDialog(
+                context: context,
+                builder: (context) => const XiaomiNotificationGuide(),
+              ).then((_) {
+                // Marcar que el diálogo ya se mostró
+                prefs.setBool('xiaomi_dialog_shown', true);
+              });
+            }
+          });
+        });
+      }
+    } catch (e) {
+      print('Error al verificar el tipo de dispositivo: $e');
     }
   }
 
@@ -337,11 +419,12 @@ class _HomeScreenState extends State<HomeScreen> {
           body: Container(
             width: double.infinity,
             decoration: BoxDecoration(
-                gradient: LinearGradient(begin: Alignment.topCenter, colors: [
-              Colors.green.shade600,
-              Colors.green.shade500,
-              Colors.green.shade400,
-            ])),
+              gradient: LinearGradient(begin: Alignment.topCenter, colors: [
+                Colors.green.shade600,
+                Colors.green.shade500,
+                Colors.green.shade400,
+              ])
+            ),
             child: Column(
               children: [
                 const SizedBox(height: 60),
@@ -355,89 +438,161 @@ class _HomeScreenState extends State<HomeScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           FadeInUp(
-                              duration: const Duration(milliseconds: 1000),
-                              child: const Text(
-                                "BiPe Alerta",
-                                style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 32,
-                                    fontWeight: FontWeight.bold),
-                              )),
+                            duration: const Duration(milliseconds: 1000),
+                            child: const Text(
+                              "BiPe Alerta",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 32,
+                                fontWeight: FontWeight.bold),
+                            )
+                          ),
                           const SizedBox(height: 10),
                           FadeInUp(
-                              duration: const Duration(milliseconds: 1300),
-                              child: const Text(
-                                "Panel de Control",
-                                style: TextStyle(
-                                    color: Colors.white, fontSize: 18),
-                              )),
+                            duration: const Duration(milliseconds: 1300),
+                            child: const Text(
+                              "Panel de Control",
+                              style: TextStyle(
+                                color: Colors.white, fontSize: 18),
+                            )
+                          ),
                         ],
                       ),
                       Row(
                         children: [
-                          PopupMenuButton<String>(
-                            icon: const Icon(Icons.more_vert,
-                                color: Colors.white),
-                            onSelected: (value) {
-                              switch (value) {
-                                case 'support':
-                                  _abrirWhatsAppSoporte();
-                                  break;
-                                case 'upgrade':
-                                  _abrirWhatsAppUpgrade();
-                                  break;
-                                case 'update':
-                                  _handleUpdateBipes();
-                                  break;
-                              }
-                            },
-                            itemBuilder: (BuildContext context) => [
-                              const PopupMenuItem(
-                                value: 'update',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.sync, color: Colors.green),
-                                    SizedBox(width: 8),
-                                    Text('Actualizar Bipes'),
-                                  ],
-                                ),
+                          Showcase(
+                            key: _menuOpcionesShowcaseKey,
+                            title: 'Opciones del menú',
+                            description: 'Aquí encontrarás opciones como actualizar bipes, contactar soporte o mejorar tu plan.',
+                            targetShapeBorder: const CircleBorder(),
+                            tooltipActionConfig: const TooltipActionConfig(
+                              position: TooltipActionPosition.inside,
+                              alignment: MainAxisAlignment.spaceBetween,
+                            ),
+                            tooltipActions: [
+                              TooltipActionButton(
+                                type: TooltipDefaultActionType.previous,
+                                name: "Atras",
+                                textStyle: const TextStyle(color: Colors.white),
                               ),
-                              const PopupMenuItem(
-                                value: 'support',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.support_agent,
-                                        color: Colors.green),
-                                    SizedBox(width: 8),
-                                    Text('Soporte'),
-                                  ],
-                                ),
-                              ),
-                              const PopupMenuItem(
-                                value: 'upgrade',
-                                child: Row(
-                                  children: [
-                                    Icon(Icons.upgrade, color: Colors.green),
-                                    SizedBox(width: 8),
-                                    Text('Mejorar Plan'),
-                                  ],
-                                ),
+                              TooltipActionButton(
+                                type: TooltipDefaultActionType.next,
+                                name: "Siguiente",
+                                textStyle: const TextStyle(color: Colors.white),
                               ),
                             ],
+                            child: PopupMenuButton<String>(
+                              icon: const Icon(Icons.more_vert, color: Colors.white),
+                              onSelected: (value) {
+                                switch (value) {
+                                  case 'support':
+                                    _abrirWhatsAppSoporte();
+                                    break;
+                                  case 'upgrade':
+                                    _abrirWhatsAppUpgrade();
+                                    break;
+                                  case 'update':
+                                    _handleUpdateBipes();
+                                    break;
+                                  case 'tutorial':
+                                    _reiniciarTutorial();
+                                    break;
+                                  case 'xiaomi_guide':
+                                    showDialog(
+                                      context: context,
+                                      builder: (context) => const XiaomiNotificationGuide(),
+                                    );
+                                    break;
+                                }
+                              },
+                              itemBuilder: (BuildContext context) => [
+                                const PopupMenuItem(
+                                  value: 'update',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.sync, color: Colors.green),
+                                      SizedBox(width: 8),
+                                      Text('Actualizar Bipes'),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'support',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.support_agent, color: Colors.green),
+                                      SizedBox(width: 8),
+                                      Text('Soporte'),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'upgrade',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.upgrade, color: Colors.green),
+                                      SizedBox(width: 8),
+                                      Text('Mejorar Plan'),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'xiaomi_guide',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.phone_android, color: Colors.green),
+                                      SizedBox(width: 8),
+                                      Text('Configuración Xiaomi/Redmi'),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'tutorial',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.help_outline, color: Colors.green),
+                                      SizedBox(width: 8),
+                                      Text('Ver Tutorial'),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          IconButton(
-                            icon: _isLoggingOut
+                          Showcase(
+                            key: _cerrarSesionShowcaseKey,
+                            title: 'Cerrar sesión',
+                            description: 'Presiona aquí para cerrar sesión y salir de la aplicación.',
+                            targetShapeBorder: const CircleBorder(),
+                            tooltipActionConfig: const TooltipActionConfig(
+                              position: TooltipActionPosition.inside,
+                              alignment: MainAxisAlignment.spaceBetween,
+                            ),
+                            tooltipActions: [
+                              TooltipActionButton(
+                                type: TooltipDefaultActionType.previous,
+                                name: "Atras",
+                                textStyle: const TextStyle(color: Colors.white),
+                              ),
+                              TooltipActionButton(
+                                type: TooltipDefaultActionType.skip,
+                                name: "Saltar",
+                                textStyle: const TextStyle(color: Colors.white),
+                              ),
+                            ],
+                            child: IconButton(
+                              icon: _isLoggingOut
                                 ? const SizedBox(
                                     width: 20,
                                     height: 20,
                                     child: CircularProgressIndicator(
                                       strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                          Colors.white),
+                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                                     ),
                                   )
                                 : const Icon(Icons.logout, color: Colors.white),
-                            onPressed: _isLoggingOut ? null : _handleLogout,
+                              onPressed: _isLoggingOut ? null : _handleLogout,
+                            ),
                           ),
                         ],
                       ),
@@ -449,87 +604,136 @@ class _HomeScreenState extends State<HomeScreen> {
                 Expanded(
                   child: Container(
                     decoration: const BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(60),
-                            topRight: Radius.circular(60))),
+                      color: Colors.white,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(60),
+                        topRight: Radius.circular(60)
+                      ),
+                    ),
                     child: SingleChildScrollView(
                       child: Column(
                         children: [
                           const SizedBox(height: 30),
+                          
                           // Tarjeta de información
-                          Container(
-                            margin: const EdgeInsets.symmetric(horizontal: 20),
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
+                          Showcase(
+                            key: _negocioShowcaseKey,
+                            title: 'Información de Negocio',
+                            description: 'Aquí verás la información de tu negocio, tu nombre y el plan que tienes contratado.',
+                            targetShapeBorder: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.green.shade100,
-                                  blurRadius: 10,
-                                  spreadRadius: 1,
-                                ),
-                              ],
                             ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.business,
-                                  color: Colors.green.shade400,
-                                  size: 24,
-                                ),
-                                const SizedBox(width: 15),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        nombreNegocio,
-                                        style: TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.green.shade900,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        nombre,
-                                        style: TextStyle(
-                                          color: Colors.grey.shade700,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 4,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.green.shade100,
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                        ),
-                                        child: Text(
-                                          nombrePlan,
+                            tooltipActionConfig: const TooltipActionConfig(
+                              position: TooltipActionPosition.inside,
+                              alignment: MainAxisAlignment.spaceBetween,
+                            ),
+                            tooltipActions: [
+                              TooltipActionButton(
+                                type: TooltipDefaultActionType.skip,
+                                name: "Saltar",
+                                textStyle: const TextStyle(color: Colors.white),
+                              ),
+                              TooltipActionButton(
+                                type: TooltipDefaultActionType.next,
+                                name: "Siguiente",
+                                textStyle: const TextStyle(color: Colors.white),
+                              ),
+                            ],
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 20),
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.green.shade100,
+                                    blurRadius: 10,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.business,
+                                    color: Colors.green.shade400,
+                                    size: 24,
+                                  ),
+                                  const SizedBox(width: 15),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          nombreNegocio,
                                           style: TextStyle(
-                                            color: Colors.green.shade700,
-                                            fontWeight: FontWeight.w500,
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.green.shade900,
                                           ),
                                         ),
-                                      ),
-                                    ],
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          nombre,
+                                          style: TextStyle(
+                                            color: Colors.grey.shade700,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 12,
+                                            vertical: 4,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: Colors.green.shade100,
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Text(
+                                            nombrePlan,
+                                            style: TextStyle(
+                                              color: Colors.green.shade700,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
 
                           // Widget de Permisos
-                          PermissionsWidget(
-                            permissions: _permissions,
-                            onRequestPermission: _handlePermissionRequest,
+                          Showcase(
+                            key: _permisosShowcaseKey,
+                            title: 'Permisos necesarios',
+                            description: 'En esta sección puedes verificar y activar los permisos necesarios para que la aplicación funcione correctamente.',
+                            targetShapeBorder: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            tooltipActionConfig: const TooltipActionConfig(
+                              position: TooltipActionPosition.inside,
+                              alignment: MainAxisAlignment.spaceBetween,
+                            ),
+                            tooltipActions: [
+                              TooltipActionButton(
+                                type: TooltipDefaultActionType.previous,
+                                name: "Atras",
+                                textStyle: const TextStyle(color: Colors.white),
+                              ),
+                              TooltipActionButton(
+                                type: TooltipDefaultActionType.next,
+                                name: "Siguiente",
+                                textStyle: const TextStyle(color: Colors.white),
+                              ),
+                            ],
+                            child: PermissionsWidget(
+                              permissions: _permissions,
+                              onRequestPermission: _handlePermissionRequest,
+                            ),
                           ),
 
                           // Estado de conexión
@@ -542,13 +746,13 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               decoration: BoxDecoration(
                                 color: _connectionMessage!
-                                            .toLowerCase()
-                                            .contains('desconectado') ||
-                                        _connectionMessage!
-                                            .toLowerCase()
-                                            .contains('error')
-                                    ? Colors.red.shade50
-                                    : Colors.green.shade50,
+                                  .toLowerCase()
+                                  .contains('desconectado') ||
+                                  _connectionMessage!
+                                  .toLowerCase()
+                                  .contains('error')
+                                  ? Colors.red.shade50
+                                  : Colors.green.shade50,
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: Row(
@@ -556,21 +760,21 @@ class _HomeScreenState extends State<HomeScreen> {
                                 children: [
                                   Icon(
                                     _connectionMessage!
-                                                .toLowerCase()
-                                                .contains('desconectado') ||
-                                            _connectionMessage!
-                                                .toLowerCase()
-                                                .contains('error')
-                                        ? Icons.error_outline
-                                        : Icons.check_circle,
+                                      .toLowerCase()
+                                      .contains('desconectado') ||
+                                      _connectionMessage!
+                                      .toLowerCase()
+                                      .contains('error')
+                                      ? Icons.error_outline
+                                      : Icons.check_circle,
                                     color: _connectionMessage!
-                                                .toLowerCase()
-                                                .contains('desconectado') ||
-                                            _connectionMessage!
-                                                .toLowerCase()
-                                                .contains('error')
-                                        ? Colors.red.shade400
-                                        : Colors.green.shade400,
+                                      .toLowerCase()
+                                      .contains('desconectado') ||
+                                      _connectionMessage!
+                                      .toLowerCase()
+                                      .contains('error')
+                                      ? Colors.red.shade400
+                                      : Colors.green.shade400,
                                     size: 20,
                                   ),
                                   const SizedBox(width: 8),
@@ -578,13 +782,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                     _connectionMessage!,
                                     style: TextStyle(
                                       color: _connectionMessage!
-                                                  .toLowerCase()
-                                                  .contains('desconectado') ||
-                                              _connectionMessage!
-                                                  .toLowerCase()
-                                                  .contains('error')
-                                          ? Colors.red.shade700
-                                          : Colors.green.shade700,
+                                        .toLowerCase()
+                                        .contains('desconectado') ||
+                                        _connectionMessage!
+                                        .toLowerCase()
+                                        .contains('error')
+                                        ? Colors.red.shade700
+                                        : Colors.green.shade700,
                                       fontWeight: FontWeight.w500,
                                     ),
                                   ),
@@ -616,13 +820,35 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
 
                           // Lista de notificaciones
-                          Container(
-                            height: 300, // Altura fija para la lista
-                            child: notifications.isEmpty
+                          Showcase(
+                            key: _notificacionesShowcaseKey,
+                            title: 'Notificaciones capturadas',
+                            description: 'Aquí verás todas las notificaciones de tus apps de pagos que BiPe Alerta ha capturado y procesado.',
+                            targetShapeBorder: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            tooltipActionConfig: const TooltipActionConfig(
+                              position: TooltipActionPosition.outside,
+                              alignment: MainAxisAlignment.spaceBetween,
+                            ),
+                            tooltipActions: [
+                              TooltipActionButton(
+                                type: TooltipDefaultActionType.previous,
+                                name: "Atras",
+                                textStyle: const TextStyle(color: Colors.white),
+                              ),
+                              TooltipActionButton(
+                                type: TooltipDefaultActionType.next,
+                                name: "Siguiente",
+                                textStyle: const TextStyle(color: Colors.white),
+                              ),
+                            ],
+                            child: Container(
+                              height: 300, // Altura fija para la lista
+                              child: notifications.isEmpty
                                 ? Center(
                                     child: Column(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
+                                      mainAxisAlignment: MainAxisAlignment.center,
                                       children: [
                                         Icon(
                                           Icons.notifications_off_outlined,
@@ -646,22 +872,20 @@ class _HomeScreenState extends State<HomeScreen> {
                                     itemBuilder: (context, index) {
                                       return Card(
                                         elevation: 0,
-                                        margin:
-                                            const EdgeInsets.only(bottom: 12),
+                                        margin: const EdgeInsets.only(bottom: 12),
                                         shape: RoundedRectangleBorder(
-                                          borderRadius:
-                                              BorderRadius.circular(12),
+                                          borderRadius: BorderRadius.circular(12),
                                         ),
                                         child: ListTile(
                                           title: Text(
                                             notifications[index],
-                                            style:
-                                                const TextStyle(fontSize: 14),
+                                            style: const TextStyle(fontSize: 14),
                                           ),
                                         ),
                                       );
                                     },
                                   ),
+                            ),
                           ),
                         ],
                       ),
