@@ -115,7 +115,7 @@ class BiPeAlertTaskHandler extends TaskHandler {
       if (isFirst) {
         await sendNotification();
         isFirst = false;
-      } else if (DateTime.now().difference(lastNotificationTime).inMinutes >= 30) {
+      } else if (DateTime.now().difference(lastNotificationTime).inHours >= 12) {
         await sendNotification();
         lastNotificationTime = DateTime.now();
       }

@@ -1,9 +1,11 @@
 import 'package:bipealerta/widgets/loader_widget.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:animate_do/animate_do.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:flutter/gestures.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -273,6 +275,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 ),
                               ),
                             ),
+                           if (_currentStep == 2) ...[
+                              const SizedBox(height: 20),
+                              FadeInUp(
+                                duration: const Duration(milliseconds: 1800),
+                                child: RichText(
+                                  textAlign: TextAlign.center,
+                                  text: TextSpan(
+                                    text: '¿No recibiste el código vía WhatsApp? ',
+                                    style: const TextStyle(color: Colors.black),
+                                    children: <TextSpan>[
+                                      TextSpan(
+                                        text: 'Escríbenos y te ayudaremos',
+                                        style: TextStyle(color: Colors.green.shade500, decoration: TextDecoration.underline),
+                                        recognizer: TapGestureRecognizer()
+                                          ..onTap = () {
+                                            _launchWhatsApp();
+                                          },
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
                           ],
                         ],
                       ),
@@ -403,5 +428,34 @@ class _RegisterScreenState extends State<RegisterScreen> {
         ),
       ],
     );
+  }
+
+  void _launchWhatsApp() async {
+    final whatsappUri = Uri.parse(
+        "https://wa.me/51901089996?text=Hola,%20quisiera%20ayuda%20con%20mi%20registro");
+
+    try {
+      if (await canLaunchUrl(whatsappUri)) {
+        await launchUrl(whatsappUri, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('No se pudo abrir WhatsApp'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error al abrir WhatsApp'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
