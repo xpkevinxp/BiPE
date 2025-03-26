@@ -72,15 +72,15 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'BiPe Alertas',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
-        useMaterial3: true,
-        appBarTheme: const AppBarTheme(
-          systemOverlayStyle: SystemUiOverlayStyle.light,
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-        ),
-        scaffoldBackgroundColor: Colors.white,
-      ),
+  colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF8A56FF)),
+  useMaterial3: true,
+  appBarTheme: const AppBarTheme(
+    systemOverlayStyle: SystemUiOverlayStyle.light,
+    backgroundColor: Colors.transparent,
+    elevation: 0,
+  ),
+  scaffoldBackgroundColor: Colors.white,
+),
       initialRoute: isLoggedIn ? '/home' : '/',
       routes: {
         '/': (context) => const LoginScreen(),

@@ -315,10 +315,11 @@ packages:
   notification_listener_service:
     dependency: "direct main"
     description:
-      name: notification_listener_service
-      sha256: "8b9bd50aaa6b98e8aea4e1f060ebc6ceedade5a1613760d1ba3b724d4b3d7485"
-      url: "https://pub.dev"
-    source: hosted
+      path: "."
+      ref: HEAD
+      resolved-ref: "9c0444f4d170447f4494540ad0155cecb34a605c"
+      url: "https://github.com/xpkevinxp/notification_listener_service_BiPe.git"
+    source: git
     version: "0.3.4"
   path:
     dependency: transitive

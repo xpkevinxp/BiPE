@@ -17,13 +17,13 @@ class PermissionsWidget extends StatelessWidget {
     if (missingPermissions.isEmpty) return const SizedBox.shrink();
 
     return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.orange.shade50,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.orange.shade200),
-      ),
+  margin: const EdgeInsets.all(16),
+  padding: const EdgeInsets.all(16),
+  decoration: BoxDecoration(
+    color: Colors.orange.shade50,
+    borderRadius: BorderRadius.circular(12),
+    border: Border.all(color: Colors.orange.shade200),
+  ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -49,9 +49,9 @@ class PermissionsWidget extends StatelessWidget {
               icon: _getPermissionIcon(permission.key),
               label: Text(_getPermissionText(permission.key)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange.shade100,
-                foregroundColor: Colors.orange.shade900,
-              ),
+  backgroundColor: Colors.orange.shade100,
+  foregroundColor: Colors.orange.shade900,
+),
             ),
           )),
         ],

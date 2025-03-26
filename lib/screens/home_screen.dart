@@ -2,6 +2,7 @@ import 'package:animate_do/animate_do.dart';
 import 'package:bipealerta/services/device_helper.dart';
 import 'package:bipealerta/services/permissions_widget.dart';
 import 'package:bipealerta/widgets/xiaomiguide_widget.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:in_app_update/in_app_update.dart';
@@ -232,6 +233,25 @@ void initState() {
   }
 
   Future<void> _handleUpdateBipes() async {
+
+     // Verificar si hay conectividad antes de intentar reconectar
+    final connectivityResult = await Connectivity().checkConnectivity();
+    
+    if (connectivityResult == ConnectivityResult.none) {
+      setState(() {
+        _connectionMessage = 'Sin conexión a internet';
+      });
+      
+      // Mostrar un mensaje al usuario
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No hay conexión a internet. Verifica tu red e intenta nuevamente.'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
     if (_isUpdating) return;
 
     setState(() {
@@ -249,7 +269,7 @@ void initState() {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Datos actualizados correctamente'),
-            backgroundColor: Colors.green,
+            backgroundColor: const Color(0xFF8A56FF),
           ),
         );
       }
@@ -344,6 +364,45 @@ void initState() {
     }
   }
 
+  // En el método _handleRetryConnection de HomeScreen
+Future<void> _handleRetryConnection() async {
+  try {
+    // Verificar si hay conectividad antes de intentar reconectar
+    final connectivityResult = await Connectivity().checkConnectivity();
+    
+    if (connectivityResult == ConnectivityResult.none) {
+      setState(() {
+        _connectionMessage = 'Sin conexión a internet';
+      });
+      
+      // Mostrar un mensaje al usuario
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('No hay conexión a internet. Verifica tu red e intenta nuevamente.'),
+          backgroundColor: Colors.red,
+          duration: Duration(seconds: 3),
+        ),
+      );
+      return;
+    }
+    
+    setState(() {
+      _connectionMessage = 'Intentando reconectar...';
+    });
+    
+    // Enviar comando para reiniciar la conexión al servicio
+    FlutterForegroundTask.sendDataToTask({'action': 'retryConnection'});
+    
+    // Breve pausa para permitir que el servicio inicie la reconexión
+    await Future.delayed(const Duration(seconds: 2));
+  } catch (e) {
+    print('Error al reintentar conexión: $e');
+    setState(() {
+      _connectionMessage = 'Error al reintentar: $e';
+    });
+  }
+}
+
   void _abrirWhatsAppSoporte() async {
     final whatsappUri = Uri.parse(
         "https://wa.me/51901089996?text=Hola,%20necesito%20soporte%20técnico");
@@ -402,6 +461,91 @@ void initState() {
     }
   }
 
+  // Métodos para manejar la apariencia según el estado de conexión
+Color _getStatusBackgroundColor(String message) {
+  message = message.toLowerCase();
+  if (message.contains('conectado')) {
+    return const Color(0xFFF0EBFF); // Púrpura muy claro
+  } else if (message.contains('intentando reconectar') || message.contains('sin conexión')) {
+    return Colors.orange.shade50;
+  } else if (message.contains('error') || message.contains('perdida') || message.contains('desconectado')) {
+    return Colors.red.shade50;
+  } else {
+    return const Color(0xFFEEE6FF); // Púrpura claro informativo
+  }
+}
+
+Color _getStatusBorderColor(String message) {
+  message = message.toLowerCase();
+  if (message.contains('conectado')) {
+    return const Color(0xFFD4BFFF); // Púrpura claro
+  } else if (message.contains('intentando reconectar') || message.contains('sin conexión')) {
+    return Colors.orange.shade200;
+  } else if (message.contains('error') || message.contains('perdida') || message.contains('desconectado')) {
+    return Colors.red.shade200;
+  } else {
+    return const Color(0xFFCCB3FF); // Púrpura medio
+  }
+}
+
+Color _getStatusIconColor(String message) {
+  message = message.toLowerCase();
+  if (message.contains('conectado')) {
+    return const Color(0xFF8A56FF); // Púrpura del logo
+  } else if (message.contains('intentando reconectar') || message.contains('sin conexión')) {
+    return Colors.orange.shade500;
+  } else if (message.contains('error') || message.contains('perdida') || message.contains('desconectado')) {
+    return Colors.red.shade500;
+  } else {
+    return const Color(0xFF9E73FF); // Púrpura medio
+  }
+}
+
+Color _getStatusTextColor(String message) {
+  message = message.toLowerCase();
+  if (message.contains('conectado')) {
+    return const Color(0xFF6433E0); // Púrpura oscuro
+  } else if (message.contains('intentando reconectar') || message.contains('sin conexión')) {
+    return Colors.orange.shade800;
+  } else if (message.contains('error') || message.contains('perdida') || message.contains('desconectado')) {
+    return Colors.red.shade800;
+  } else {
+    return const Color(0xFF7847E0); // Púrpura medio oscuro
+  }
+}
+
+Color _getRetryButtonColor(String message) {
+  message = message.toLowerCase();
+  if (message.contains('error') || message.contains('perdida') || message.contains('desconectado')) {
+    return Colors.red.shade500;
+  } else {
+    return Colors.orange.shade500; // Para estados de advertencia
+  }
+}
+
+IconData _getStatusIcon(String message) {
+  message = message.toLowerCase();
+  if (message.contains('conectado')) {
+    return Icons.check_circle;
+  } else if (message.contains('intentando reconectar')) {
+    return Icons.sync;
+  } else if (message.contains('sin conexión')) {
+    return Icons.signal_wifi_off;
+  } else if (message.contains('error') || message.contains('perdida') || message.contains('desconectado')) {
+    return Icons.error_outline;
+  } else {
+    return Icons.info_outline;
+  }
+}
+
+bool _shouldShowRetryButton(String message) {
+  message = message.toLowerCase();
+  return message.contains('desconectado') || 
+         message.contains('perdida') || 
+         message.contains('error') ||
+         message.contains('sin conexión');
+}
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -417,14 +561,14 @@ void initState() {
         onWillPop: () async => false,
         child: Scaffold(
           body: Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(begin: Alignment.topCenter, colors: [
-                Colors.green.shade600,
-                Colors.green.shade500,
-                Colors.green.shade400,
-              ])
-            ),
+  width: double.infinity,
+  decoration: const BoxDecoration(
+    gradient: LinearGradient(begin: Alignment.topCenter, colors: [
+      Color(0xFF8A56FF), // Color principal del logo
+      Color(0xFF9E73FF), // Un poco más claro
+      Color(0xFFAB85FF), // Aún más claro
+    ])
+  ),
             child: Column(
               children: [
                 const SizedBox(height: 60),
@@ -510,7 +654,7 @@ void initState() {
                                   value: 'update',
                                   child: Row(
                                     children: [
-                                      Icon(Icons.sync, color: Colors.green),
+                                      Icon(Icons.sync, color: const Color(0xFF8A56FF)),
                                       SizedBox(width: 8),
                                       Text('Actualizar Bipes'),
                                     ],
@@ -520,7 +664,7 @@ void initState() {
                                   value: 'support',
                                   child: Row(
                                     children: [
-                                      Icon(Icons.support_agent, color: Colors.green),
+                                      Icon(Icons.support_agent, color: const Color(0xFF8A56FF)),
                                       SizedBox(width: 8),
                                       Text('Soporte'),
                                     ],
@@ -530,7 +674,7 @@ void initState() {
                                   value: 'upgrade',
                                   child: Row(
                                     children: [
-                                      Icon(Icons.upgrade, color: Colors.green),
+                                      Icon(Icons.upgrade, color: const Color(0xFF8A56FF)),
                                       SizedBox(width: 8),
                                       Text('Mejorar Plan'),
                                     ],
@@ -540,7 +684,7 @@ void initState() {
                                   value: 'xiaomi_guide',
                                   child: Row(
                                     children: [
-                                      Icon(Icons.phone_android, color: Colors.green),
+                                      Icon(Icons.phone_android, color: const Color(0xFF8A56FF)),
                                       SizedBox(width: 8),
                                       Text('Configuración Xiaomi/Redmi'),
                                     ],
@@ -550,7 +694,7 @@ void initState() {
                                   value: 'tutorial',
                                   child: Row(
                                     children: [
-                                      Icon(Icons.help_outline, color: Colors.green),
+                                      Icon(Icons.help_outline, color: const Color(0xFF8A56FF)),
                                       SizedBox(width: 8),
                                       Text('Ver Tutorial'),
                                     ],
@@ -647,7 +791,7 @@ void initState() {
                                 borderRadius: BorderRadius.circular(20),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: Colors.green.shade100,
+                                    color: const Color(0xFFEEE6FF),
                                     blurRadius: 10,
                                     spreadRadius: 1,
                                   ),
@@ -657,7 +801,7 @@ void initState() {
                                 children: [
                                   Icon(
                                     Icons.business,
-                                    color: Colors.green.shade400,
+                                    color: const Color(0xFFAB85FF),
                                     size: 24,
                                   ),
                                   const SizedBox(width: 15),
@@ -670,7 +814,7 @@ void initState() {
                                           style: TextStyle(
                                             fontSize: 18,
                                             fontWeight: FontWeight.bold,
-                                            color: Colors.green.shade900,
+                                            color:  Color.fromARGB(255, 76, 39, 163),
                                           ),
                                         ),
                                         const SizedBox(height: 4),
@@ -687,13 +831,13 @@ void initState() {
                                             vertical: 4,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: Colors.green.shade100,
+                                            color: const Color(0xFFEEE6FF),
                                             borderRadius: BorderRadius.circular(12),
                                           ),
                                           child: Text(
                                             nombrePlan,
                                             style: TextStyle(
-                                              color: Colors.green.shade700,
+                                              color: const Color(0xFF8A56FF),
                                               fontWeight: FontWeight.w500,
                                             ),
                                           ),
@@ -737,64 +881,67 @@ void initState() {
                           ),
 
                           // Estado de conexión
-                          if (_connectionMessage != null)
-                            Container(
-                              margin: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 8,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _connectionMessage!
-                                  .toLowerCase()
-                                  .contains('desconectado') ||
-                                  _connectionMessage!
-                                  .toLowerCase()
-                                  .contains('error')
-                                  ? Colors.red.shade50
-                                  : Colors.green.shade50,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    _connectionMessage!
-                                      .toLowerCase()
-                                      .contains('desconectado') ||
-                                      _connectionMessage!
-                                      .toLowerCase()
-                                      .contains('error')
-                                      ? Icons.error_outline
-                                      : Icons.check_circle,
-                                    color: _connectionMessage!
-                                      .toLowerCase()
-                                      .contains('desconectado') ||
-                                      _connectionMessage!
-                                      .toLowerCase()
-                                      .contains('error')
-                                      ? Colors.red.shade400
-                                      : Colors.green.shade400,
-                                    size: 20,
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Text(
-                                    _connectionMessage!,
-                                    style: TextStyle(
-                                      color: _connectionMessage!
-                                        .toLowerCase()
-                                        .contains('desconectado') ||
-                                        _connectionMessage!
-                                        .toLowerCase()
-                                        .contains('error')
-                                        ? Colors.red.shade700
-                                        : Colors.green.shade700,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
+if (_connectionMessage != null)
+  Container(
+    margin: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: _getStatusBackgroundColor(_connectionMessage!),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(
+        color: _getStatusBorderColor(_connectionMessage!),
+        width: 1,
+      ),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              _getStatusIcon(_connectionMessage!),
+              color: _getStatusIconColor(_connectionMessage!),
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                _connectionMessage!,
+                style: TextStyle(
+                  color: _getStatusTextColor(_connectionMessage!),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+          ],
+        ),
+        
+        // Botón de reintentar si está desconectado o hay error
+        if (_shouldShowRetryButton(_connectionMessage!))
+          Padding(
+            padding: const EdgeInsets.only(top: 12.0),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _handleRetryConnection,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _getRetryButtonColor(_connectionMessage!),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text(
+                  'Reintentar conexión',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          ),
+      ],
+    ),
+  ),
 
                           const SizedBox(height: 20),
                           // Título de notificaciones

@@ -1,4 +1,5 @@
 import 'package:bipealerta/services/auth_service.dart';
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -51,43 +52,78 @@ class BiPeAlertTaskHandler extends TaskHandler {
   }
 
   @override
-  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
-    print('TaskHandler - iniciando servicios');
+Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
+  print('TaskHandler - iniciando servicios');
+  try {
+    // Verificar y actualizar bipes si es necesario
     try {
-      // Verificar y actualizar bipes si es necesario
+      print('Verificando Bipes en onStart');
+      
+      await authService.migrateAndUpdateBipes();
+    } catch (e) {
+      print('TaskHandler - Error actualizando bipes: $e');
+    }
+
+    print('TaskHandler - inicializando NotificationService');
+    final isGranted = await NotificationListenerService.isPermissionGranted();
+    if (!isGranted) {
+      print('TaskHandler - solicitando permisos de notificación');
+      await NotificationListenerService.requestPermission();
+    }
+
+    await _notificationService.initialize();
+    await _notificationService.debugBipesStatus();
+    print('TaskHandler - NotificationService inicializado');
+
+    // Configurar reinicio automático del servicio de notificaciones cada 30 minutos
+    Timer.periodic(const Duration(minutes: 30), (_) async {
       try {
-        print('Verificando Bipes en onStart');
-        
-        await authService.migrateAndUpdateBipes();
+        // Verificar si el servicio está funcionando correctamente
+        if (!await NotificationListenerService.isPermissionGranted()) {
+          print('Reiniciando servicio de notificaciones por precaución');
+          await _notificationService.dispose();
+          await _notificationService.initialize();
+        }
       } catch (e) {
-        print('TaskHandler - Error actualizando bipes: $e');
+        print('Error verificando servicio de notificaciones: $e');
+        // Intentar reiniciar en caso de error
+        try {
+          await _notificationService.dispose();
+          await Future.delayed(const Duration(seconds: 2));
+          await _notificationService.initialize();
+        } catch (innerE) {
+          print('Error reiniciando servicio de notificaciones: $innerE');
+        }
       }
+    });
 
-      print('TaskHandler - inicializando NotificationService');
-      final isGranted = await NotificationListenerService.isPermissionGranted();
-      if (!isGranted) {
-        print('TaskHandler - solicitando permisos de notificación');
-        await NotificationListenerService.requestPermission();
-      }
+    final prefs = await SharedPreferences.getInstance();
+    final idNegocio = prefs.getInt('idNegocio')?.toString();
+    final idUsuario = prefs.getInt('idUsuario')?.toString();
 
-      await _notificationService.initialize();
-      await _notificationService.debugBipesStatus();
-      print('TaskHandler - NotificationService inicializado');
-
-      final prefs = await SharedPreferences.getInstance();
-      final idNegocio = prefs.getInt('idNegocio')?.toString();
-      final idUsuario = prefs.getInt('idUsuario')?.toString();
-
-      if (idNegocio != null && idUsuario != null) {
-        _configureCallbacks();
+    if (idNegocio != null && idUsuario != null) {
+      _configureCallbacks();
+      
+      // Verificar la conectividad inicial antes de intentar conectar
+      final connectivity = Connectivity();
+      final connectivityResult = await connectivity.checkConnectivity();
+      
+      if (connectivityResult != ConnectivityResult.none) {
         await _signalRService.iniciarConexion(idNegocio, idUsuario);
       } else {
-        print('TaskHandler - ID de negocio o usuario no encontrado');
+        print('TaskHandler - Sin conexión a internet. Esperando conectividad...');
+        FlutterForegroundTask.updateService(
+          notificationTitle: 'BiPe Alerta',
+          notificationText: 'Sin conexión a internet',
+        );
       }
-    } catch (e) {
-      print('TaskHandler - Error en onStart: $e');
+    } else {
+      print('TaskHandler - ID de negocio o usuario no encontrado');
     }
+  } catch (e) {
+    print('TaskHandler - Error en onStart: $e');
   }
+}
 
   void _configureCallbacks() {
     _notificationService.onNotificationReceived = (message) {
@@ -141,11 +177,6 @@ class BiPeAlertTaskHandler extends TaskHandler {
   }
 
   @override
-  void onNotificationPressed() {
-    print('onNotificationPressed');
-  }
-
-  @override
 Future<void> onReceiveData(Object data) async {
   try {
     if (data == 'getStatus') {
@@ -154,28 +185,54 @@ Future<void> onReceiveData(Object data) async {
         'message': _signalRService.isConnected ? 'Conectado' : 'Desconectado'
       });
     } 
-    else if (data is Map<String, dynamic> && data['action'] == 'updateBipes') {
-      print('Actualizando bipes en el servicio en segundo plano');
-      try {
-        await authService.migrateAndUpdateBipes();
+    else if (data is Map<String, dynamic>) {
+      if (data['action'] == 'updateBipes') {
+        print('Actualizando bipes en el servicio en segundo plano');
+        try {
+          await authService.migrateAndUpdateBipes();
 
-         // Reiniciar el servicio de notificaciones
-        await _notificationService.dispose();
-        await _notificationService.initialize();
-        await _notificationService.debugBipesStatus();
-        // Confirmar que los bipes se actualizaron correctamente
-        FlutterForegroundTask.sendDataToMain({
-          'message': 'Bipes actualizados y servicio reiniciado'
-        });
-      } catch (e) {
-        print('Error actualizando bipes en servicio: $e');
-        FlutterForegroundTask.sendDataToMain({
-          'message': 'Error actualizando bipes en servicio'
-        });
+          // Reiniciar el servicio de notificaciones
+          await _notificationService.dispose();
+          await _notificationService.initialize();
+          await _notificationService.debugBipesStatus();
+          // Confirmar que los bipes se actualizaron correctamente
+          FlutterForegroundTask.sendDataToMain({
+            'message': 'Bipes actualizados y servicio reiniciado'
+          });
+        } catch (e) {
+          print('Error actualizando bipes en servicio: $e');
+          FlutterForegroundTask.sendDataToMain({
+            'message': 'Error actualizando bipes en servicio'
+          });
+        }
+      } 
+      else if (data['action'] == 'retryConnection') {
+        print('Reintentando conexión manualmente');
+        try {
+          await _signalRService.reintentarConexion();
+          FlutterForegroundTask.sendDataToMain({
+            'message': _signalRService.isConnected ? 'Conectado' : 'Intentando reconectar...'
+          });
+        } catch (e) {
+          print('Error al reintentar conexión: $e');
+          FlutterForegroundTask.sendDataToMain({
+            'message': 'Error al reintentar conexión'
+          });
+        }
       }
     }
   } catch (e) {
     print('Error en onReceiveData: $e');
+  }
+}
+
+@override
+void onNotificationPressed() {
+  print('onNotificationPressed - Reintentando conexión');
+  
+  // Si la conexión está perdida, intentar reconectar
+  if (!_signalRService.isConnected) {
+    _signalRService.reintentarConexion();
   }
 }
 }

@@ -147,9 +147,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
         width: double.infinity,
         decoration: BoxDecoration(
             gradient: LinearGradient(begin: Alignment.topCenter, colors: [
-          Colors.green.shade600,
-          Colors.green.shade500,
-          Colors.green.shade400,
+          const Color(0xFF8A56FF),
+          const Color(0xFF9E73FF),
+          const Color(0xFFAB85FF),
         ])),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -206,7 +206,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     borderRadius: BorderRadius.circular(10),
                                     boxShadow: [
                                       BoxShadow(
-                                          color: Colors.green.shade200
+                                          color: const Color(0xFFD4BFFF)
                                               .withOpacity(0.3),
                                           blurRadius: 20,
                                           offset: const Offset(0, 10))
@@ -228,7 +228,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                           ? _handleFirstStep
                                           : _handleSecondStep),
                                   style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.green.shade500,
+                                    backgroundColor: const Color(0xFF9E73FF),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(50),
                                     ),
@@ -269,7 +269,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 child: Text(
                                   "Volver atrás",
                                   style: TextStyle(
-                                    color: Colors.green.shade300,
+                                    color: const Color(0xFFD4BFFF),
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
@@ -287,7 +287,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     children: <TextSpan>[
                                       TextSpan(
                                         text: 'Escríbenos y te ayudaremos',
-                                        style: TextStyle(color: Colors.green.shade500, decoration: TextDecoration.underline),
+                                        style: TextStyle(color: const Color(0xFF9E73FF), decoration: TextDecoration.underline),
                                         recognizer: TapGestureRecognizer()
                                           ..onTap = () {
                                             _launchWhatsApp();

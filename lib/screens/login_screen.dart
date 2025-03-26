@@ -68,17 +68,17 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topCenter,
-            colors: [
-              Colors.green.shade600,
-              Colors.green.shade500,
-              Colors.green.shade400,
-            ]
-          )
-        ),
+  width: double.infinity,
+  decoration: const BoxDecoration(
+    gradient: LinearGradient(
+      begin: Alignment.topCenter,
+      colors: [
+        Color(0xFF8A56FF),
+        Color(0xFF9E73FF),
+        Color(0xFFAB85FF),
+      ]
+    )
+  ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: <Widget>[
@@ -194,7 +194,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               child: ElevatedButton(
                                 onPressed: _isLoading ? null : _login,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green.shade500,
+    backgroundColor: const Color(0xFF9E73FF),
                                   shape: RoundedRectangleBorder(
                                     borderRadius: BorderRadius.circular(50),
                                   ),
@@ -238,12 +238,12 @@ class _LoginScreenState extends State<LoginScreen> {
                                     );
                                   },
                                   child: Text(
-                                    "Regístrate aquí",
-                                    style: TextStyle(
-                                      color: Colors.green.shade400,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
+  "Regístrate aquí",
+  style: TextStyle(
+    color: const Color(0xFF9E73FF),
+    fontWeight: FontWeight.bold,
+  ),
+),
                                 ),
                               ],
                             ),
