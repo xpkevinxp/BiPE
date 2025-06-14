@@ -39,15 +39,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     // Mostramos el loader
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (BuildContext context) {
-      return const LoadingDialog(
-        message: "Enviando código de verificación...",
-      );
-    },
-  );
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return const LoadingDialog(
+          message: "Enviando código de verificación...",
+        );
+      },
+    );
 
     try {
       // Aquí iría la llamada a tu API para enviar el código
@@ -87,15 +87,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     // Mostramos el loader
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (BuildContext context) {
-      return const LoadingDialog(
-        message: "Completando registro...",
-      );
-    },
-  );
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return const LoadingDialog(
+          message: "Completando registro...",
+        );
+      },
+    );
 
     try {
       final response = await http.post(
@@ -103,13 +103,12 @@ class _RegisterScreenState extends State<RegisterScreen> {
             'https://apialert.c-centralizador.com/api/usuario/SaveUsuarioNegocio/v2'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-  "NombreNegocio": _businessNameController.text,
-  "NombrePropietario": _ownerNameController.text,
-  "ApellidoPropietario": _ownerLastNameController.text,
-  "Telefono": _phoneController.text,
-  "Code": _verificationCodeController.text
-}
-),
+          "NombreNegocio": _businessNameController.text,
+          "NombrePropietario": _ownerNameController.text,
+          "ApellidoPropietario": _ownerLastNameController.text,
+          "Telefono": _phoneController.text,
+          "Code": _verificationCodeController.text
+        }),
       );
       Navigator.pop(context);
       if (response.statusCode == 200) {
@@ -275,19 +274,23 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 ),
                               ),
                             ),
-                           if (_currentStep == 2) ...[
+                            if (_currentStep == 2) ...[
                               const SizedBox(height: 20),
                               FadeInUp(
                                 duration: const Duration(milliseconds: 1800),
                                 child: RichText(
                                   textAlign: TextAlign.center,
                                   text: TextSpan(
-                                    text: '¿No recibiste el código vía WhatsApp? ',
+                                    text:
+                                        '¿No recibiste el código vía WhatsApp? ',
                                     style: const TextStyle(color: Colors.black),
                                     children: <TextSpan>[
                                       TextSpan(
                                         text: 'Escríbenos y te ayudaremos',
-                                        style: TextStyle(color: const Color(0xFF9E73FF), decoration: TextDecoration.underline),
+                                        style: TextStyle(
+                                            color: const Color(0xFF9E73FF),
+                                            decoration:
+                                                TextDecoration.underline),
                                         recognizer: TapGestureRecognizer()
                                           ..onTap = () {
                                             _launchWhatsApp();
@@ -432,7 +435,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   void _launchWhatsApp() async {
     final whatsappUri = Uri.parse(
-        "https://wa.me/51901089996?text=Hola,%20quisiera%20ayuda%20con%20mi%20registro");
+        "https://wa.me/51930429628?text=Hola,%20quisiera%20ayuda%20con%20mi%20registro");
 
     try {
       if (await canLaunchUrl(whatsappUri)) {

@@ -3,6 +3,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:animate_do/animate_do.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../services/auth_service.dart';
 import 'home_screen.dart';
 
@@ -61,6 +62,13 @@ class _LoginScreenState extends State<LoginScreen> {
           setState(() => _isLoading = false);
         }
       }
+    }
+  }
+
+  Future<void> _launchBipeWebsite() async {
+    final Uri url = Uri.parse('https://www.bipealerta.com');
+    if (!await launchUrl(url)) {
+      throw Exception('Could not launch $url');
     }
   }
 
@@ -246,6 +254,20 @@ class _LoginScreenState extends State<LoginScreen> {
 ),
                                 ),
                               ],
+                            ),
+                          ),
+                          const SizedBox(height: 20), // Added SizedBox for spacing
+                          FadeInUp(
+                            duration: const Duration(milliseconds: 1800), // Adjusted duration
+                            child: GestureDetector(
+                              onTap: _launchBipeWebsite,
+                              child: const Text(
+                                "¿Qué es BiPe?",
+                                style: TextStyle(
+                                  color: Color(0xFF9E73FF), // Using the same color for consistency
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                             ),
                           ),
                           const SizedBox(height: 30),

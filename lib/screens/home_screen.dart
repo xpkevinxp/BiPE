@@ -13,6 +13,7 @@ import 'dart:async';
 import '../services/auth_service.dart';
 import '../services/background_service.dart';
 import '../services/permission_service.dart';
+import 'trabajadores_screen.dart'; // Import the new screen
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -27,6 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final GlobalKey _permisosShowcaseKey = GlobalKey();
   final GlobalKey _notificacionesShowcaseKey = GlobalKey();
   final GlobalKey _menuOpcionesShowcaseKey = GlobalKey();
+  final GlobalKey _trabajadoresShowcaseKey = GlobalKey(); // New key for the button
   final GlobalKey _cerrarSesionShowcaseKey = GlobalKey();
 
   final AuthService _authService = AuthService();
@@ -43,40 +45,39 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isUpdating = false;
 
   @override
-void initState() {
-  super.initState();
-  FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
-  _checkPermissions();
-  _initializeApp();
-  
-  
-  // Iniciar el tutorial después de que la pantalla esté cargada
-  WidgetsBinding.instance.addPostFrameCallback((_) {
-    _startTutorialIfNeeded();
-  });
-}
+  void initState() {
+    super.initState();
+    FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
+    _checkPermissions();
+    _initializeApp();
 
+    // Iniciar el tutorial después de que la pantalla esté cargada
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startTutorialIfNeeded();
+    });
+  }
 
   Future<void> _startTutorialIfNeeded() async {
-  final prefs = await SharedPreferences.getInstance();
-  bool tutorialShown = prefs.getBool('tutorial_shown') ?? false;
-  
-  if (!tutorialShown && mounted) {
-    await Future.delayed(const Duration(milliseconds: 500));
-    
-    ShowCaseWidget.of(context).startShowCase([
-      _negocioShowcaseKey,
-      _permisosShowcaseKey,
-      _notificacionesShowcaseKey,
-      _menuOpcionesShowcaseKey,
-      _cerrarSesionShowcaseKey,
-    ]);
-    
-    // Marcar que el tutorial ya se mostró
-    await prefs.setBool('tutorial_shown', true);
+    final prefs = await SharedPreferences.getInstance();
+    bool tutorialShown = prefs.getBool('tutorial_shown') ?? false;
+
+    if (!tutorialShown && mounted) {
+      await Future.delayed(const Duration(milliseconds: 500));
+
+      ShowCaseWidget.of(context).startShowCase([
+        _negocioShowcaseKey,
+        _permisosShowcaseKey,
+        _notificacionesShowcaseKey,
+        _menuOpcionesShowcaseKey,
+        _trabajadoresShowcaseKey, // Add the new key
+        _cerrarSesionShowcaseKey,
+      ]);
+
+      // Marcar que el tutorial ya se mostró
+      await prefs.setBool('tutorial_shown', true);
+    }
   }
-}
-  
+
   // Implementar un método para iniciar el tutorial manualmente
   void _reiniciarTutorial() {
     ShowCaseWidget.of(context).startShowCase([
@@ -84,6 +85,7 @@ void initState() {
       _permisosShowcaseKey,
       _notificacionesShowcaseKey,
       _menuOpcionesShowcaseKey,
+      _trabajadoresShowcaseKey, // Add the new key
       _cerrarSesionShowcaseKey,
     ]);
   }
@@ -123,12 +125,13 @@ void initState() {
       if (info.updateAvailability == UpdateAvailability.updateAvailable) {
         await _stopForegroundTask();
         final result = await InAppUpdate.performImmediateUpdate();
-        
+
         if (result == AppUpdateResult.inAppUpdateFailed) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
-                content: Text('No se puede actualizar en este momento. Verifica el espacio de almacenamiento y la batería del dispositivo.'),
+                content: Text(
+                    'No se puede actualizar en este momento. Verifica el espacio de almacenamiento y la batería del dispositivo.'),
                 duration: Duration(seconds: 5),
               ),
             );
@@ -140,7 +143,8 @@ void initState() {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('No se puede actualizar en este momento. Inténtalo más tarde.'),
+            content: Text(
+                'No se puede actualizar en este momento. Inténtalo más tarde.'),
             duration: Duration(seconds: 5),
           ),
         );
@@ -233,19 +237,19 @@ void initState() {
   }
 
   Future<void> _handleUpdateBipes() async {
-
-     // Verificar si hay conectividad antes de intentar reconectar
+    // Verificar si hay conectividad antes de intentar reconectar
     final connectivityResult = await Connectivity().checkConnectivity();
-    
+
     if (connectivityResult == ConnectivityResult.none) {
       setState(() {
         _connectionMessage = 'Sin conexión a internet';
       });
-      
+
       // Mostrar un mensaje al usuario
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('No hay conexión a internet. Verifica tu red e intenta nuevamente.'),
+          content: Text(
+              'No hay conexión a internet. Verifica tu red e intenta nuevamente.'),
           backgroundColor: Colors.red,
           duration: Duration(seconds: 3),
         ),
@@ -261,10 +265,10 @@ void initState() {
 
     try {
       await _authService.migrateAndUpdateBipes();
-      
+
       // Notificar al servicio en segundo plano
       FlutterForegroundTask.sendDataToTask({'action': 'updateBipes'});
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -339,14 +343,14 @@ void initState() {
   Future<void> _checkXiaomiDevice() async {
     try {
       bool isXiaomi = await DeviceHelper.isXiaomiDevice();
-      
+
       if (isXiaomi && mounted) {
         // Esperar a que la pantalla esté completamente cargada
         WidgetsBinding.instance.addPostFrameCallback((_) {
           // Verificar si el diálogo ya se ha mostrado antes
           SharedPreferences.getInstance().then((prefs) {
             bool? dialogShown = prefs.getBool('xiaomi_dialog_shown');
-            
+
             if (dialogShown != true) {
               showDialog(
                 context: context,
@@ -365,47 +369,48 @@ void initState() {
   }
 
   // En el método _handleRetryConnection de HomeScreen
-Future<void> _handleRetryConnection() async {
-  try {
-    // Verificar si hay conectividad antes de intentar reconectar
-    final connectivityResult = await Connectivity().checkConnectivity();
-    
-    if (connectivityResult == ConnectivityResult.none) {
+  Future<void> _handleRetryConnection() async {
+    try {
+      // Verificar si hay conectividad antes de intentar reconectar
+      final connectivityResult = await Connectivity().checkConnectivity();
+
+      if (connectivityResult == ConnectivityResult.none) {
+        setState(() {
+          _connectionMessage = 'Sin conexión a internet';
+        });
+
+        // Mostrar un mensaje al usuario
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'No hay conexión a internet. Verifica tu red e intenta nuevamente.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+        return;
+      }
+
       setState(() {
-        _connectionMessage = 'Sin conexión a internet';
+        _connectionMessage = 'Intentando reconectar...';
       });
-      
-      // Mostrar un mensaje al usuario
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('No hay conexión a internet. Verifica tu red e intenta nuevamente.'),
-          backgroundColor: Colors.red,
-          duration: Duration(seconds: 3),
-        ),
-      );
-      return;
+
+      // Enviar comando para reiniciar la conexión al servicio
+      FlutterForegroundTask.sendDataToTask({'action': 'retryConnection'});
+
+      // Breve pausa para permitir que el servicio inicie la reconexión
+      await Future.delayed(const Duration(seconds: 2));
+    } catch (e) {
+      print('Error al reintentar conexión: $e');
+      setState(() {
+        _connectionMessage = 'Error al reintentar: $e';
+      });
     }
-    
-    setState(() {
-      _connectionMessage = 'Intentando reconectar...';
-    });
-    
-    // Enviar comando para reiniciar la conexión al servicio
-    FlutterForegroundTask.sendDataToTask({'action': 'retryConnection'});
-    
-    // Breve pausa para permitir que el servicio inicie la reconexión
-    await Future.delayed(const Duration(seconds: 2));
-  } catch (e) {
-    print('Error al reintentar conexión: $e');
-    setState(() {
-      _connectionMessage = 'Error al reintentar: $e';
-    });
   }
-}
 
   void _abrirWhatsAppSoporte() async {
     final whatsappUri = Uri.parse(
-        "https://wa.me/51901089996?text=Hola,%20necesito%20soporte%20técnico");
+        "https://wa.me/51930429628?text=Hola,%20necesito%20soporte%20técnico");
 
     try {
       if (await canLaunchUrl(whatsappUri)) {
@@ -434,7 +439,7 @@ Future<void> _handleRetryConnection() async {
 
   void _abrirWhatsAppUpgrade() async {
     final whatsappUri = Uri.parse(
-        "https://wa.me/51901089996?text=Hola,%20quisiera%20información%20sobre%20los%20planes%20premium");
+        "https://wa.me/51930429628?text=Hola,%20quisiera%20información%20sobre%20los%20planes%20premium");
 
     try {
       if (await canLaunchUrl(whatsappUri)) {
@@ -462,89 +467,105 @@ Future<void> _handleRetryConnection() async {
   }
 
   // Métodos para manejar la apariencia según el estado de conexión
-Color _getStatusBackgroundColor(String message) {
-  message = message.toLowerCase();
-  if (message.contains('conectado')) {
-    return const Color(0xFFF0EBFF); // Púrpura muy claro
-  } else if (message.contains('intentando reconectar') || message.contains('sin conexión')) {
-    return Colors.orange.shade50;
-  } else if (message.contains('error') || message.contains('perdida') || message.contains('desconectado')) {
-    return Colors.red.shade50;
-  } else {
-    return const Color(0xFFEEE6FF); // Púrpura claro informativo
+  Color _getStatusBackgroundColor(String message) {
+    message = message.toLowerCase();
+    if (message.contains('conectado')) {
+      return const Color(0xFFF0EBFF); // Púrpura muy claro
+    } else if (message.contains('intentando reconectar') ||
+        message.contains('sin conexión')) {
+      return Colors.orange.shade50;
+    } else if (message.contains('error') ||
+        message.contains('perdida') ||
+        message.contains('desconectado')) {
+      return Colors.red.shade50;
+    } else {
+      return const Color(0xFFEEE6FF); // Púrpura claro informativo
+    }
   }
-}
 
-Color _getStatusBorderColor(String message) {
-  message = message.toLowerCase();
-  if (message.contains('conectado')) {
-    return const Color(0xFFD4BFFF); // Púrpura claro
-  } else if (message.contains('intentando reconectar') || message.contains('sin conexión')) {
-    return Colors.orange.shade200;
-  } else if (message.contains('error') || message.contains('perdida') || message.contains('desconectado')) {
-    return Colors.red.shade200;
-  } else {
-    return const Color(0xFFCCB3FF); // Púrpura medio
+  Color _getStatusBorderColor(String message) {
+    message = message.toLowerCase();
+    if (message.contains('conectado')) {
+      return const Color(0xFFD4BFFF); // Púrpura claro
+    } else if (message.contains('intentando reconectar') ||
+        message.contains('sin conexión')) {
+      return Colors.orange.shade200;
+    } else if (message.contains('error') ||
+        message.contains('perdida') ||
+        message.contains('desconectado')) {
+      return Colors.red.shade200;
+    } else {
+      return const Color(0xFFCCB3FF); // Púrpura medio
+    }
   }
-}
 
-Color _getStatusIconColor(String message) {
-  message = message.toLowerCase();
-  if (message.contains('conectado')) {
-    return const Color(0xFF8A56FF); // Púrpura del logo
-  } else if (message.contains('intentando reconectar') || message.contains('sin conexión')) {
-    return Colors.orange.shade500;
-  } else if (message.contains('error') || message.contains('perdida') || message.contains('desconectado')) {
-    return Colors.red.shade500;
-  } else {
-    return const Color(0xFF9E73FF); // Púrpura medio
+  Color _getStatusIconColor(String message) {
+    message = message.toLowerCase();
+    if (message.contains('conectado')) {
+      return const Color(0xFF8A56FF); // Púrpura del logo
+    } else if (message.contains('intentando reconectar') ||
+        message.contains('sin conexión')) {
+      return Colors.orange.shade500;
+    } else if (message.contains('error') ||
+        message.contains('perdida') ||
+        message.contains('desconectado')) {
+      return Colors.red.shade500;
+    } else {
+      return const Color(0xFF9E73FF); // Púrpura medio
+    }
   }
-}
 
-Color _getStatusTextColor(String message) {
-  message = message.toLowerCase();
-  if (message.contains('conectado')) {
-    return const Color(0xFF6433E0); // Púrpura oscuro
-  } else if (message.contains('intentando reconectar') || message.contains('sin conexión')) {
-    return Colors.orange.shade800;
-  } else if (message.contains('error') || message.contains('perdida') || message.contains('desconectado')) {
-    return Colors.red.shade800;
-  } else {
-    return const Color(0xFF7847E0); // Púrpura medio oscuro
+  Color _getStatusTextColor(String message) {
+    message = message.toLowerCase();
+    if (message.contains('conectado')) {
+      return const Color(0xFF6433E0); // Púrpura oscuro
+    } else if (message.contains('intentando reconectar') ||
+        message.contains('sin conexión')) {
+      return Colors.orange.shade800;
+    } else if (message.contains('error') ||
+        message.contains('perdida') ||
+        message.contains('desconectado')) {
+      return Colors.red.shade800;
+    } else {
+      return const Color(0xFF7847E0); // Púrpura medio oscuro
+    }
   }
-}
 
-Color _getRetryButtonColor(String message) {
-  message = message.toLowerCase();
-  if (message.contains('error') || message.contains('perdida') || message.contains('desconectado')) {
-    return Colors.red.shade500;
-  } else {
-    return Colors.orange.shade500; // Para estados de advertencia
+  Color _getRetryButtonColor(String message) {
+    message = message.toLowerCase();
+    if (message.contains('error') ||
+        message.contains('perdida') ||
+        message.contains('desconectado')) {
+      return Colors.red.shade500;
+    } else {
+      return Colors.orange.shade500; // Para estados de advertencia
+    }
   }
-}
 
-IconData _getStatusIcon(String message) {
-  message = message.toLowerCase();
-  if (message.contains('conectado')) {
-    return Icons.check_circle;
-  } else if (message.contains('intentando reconectar')) {
-    return Icons.sync;
-  } else if (message.contains('sin conexión')) {
-    return Icons.signal_wifi_off;
-  } else if (message.contains('error') || message.contains('perdida') || message.contains('desconectado')) {
-    return Icons.error_outline;
-  } else {
-    return Icons.info_outline;
+  IconData _getStatusIcon(String message) {
+    message = message.toLowerCase();
+    if (message.contains('conectado')) {
+      return Icons.check_circle;
+    } else if (message.contains('intentando reconectar')) {
+      return Icons.sync;
+    } else if (message.contains('sin conexión')) {
+      return Icons.signal_wifi_off;
+    } else if (message.contains('error') ||
+        message.contains('perdida') ||
+        message.contains('desconectado')) {
+      return Icons.error_outline;
+    } else {
+      return Icons.info_outline;
+    }
   }
-}
 
-bool _shouldShowRetryButton(String message) {
-  message = message.toLowerCase();
-  return message.contains('desconectado') || 
-         message.contains('perdida') || 
-         message.contains('error') ||
-         message.contains('sin conexión');
-}
+  bool _shouldShowRetryButton(String message) {
+    message = message.toLowerCase();
+    return message.contains('desconectado') ||
+        message.contains('perdida') ||
+        message.contains('error') ||
+        message.contains('sin conexión');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -561,14 +582,13 @@ bool _shouldShowRetryButton(String message) {
         onWillPop: () async => false,
         child: Scaffold(
           body: Container(
-  width: double.infinity,
-  decoration: const BoxDecoration(
-    gradient: LinearGradient(begin: Alignment.topCenter, colors: [
-      Color(0xFF8A56FF), // Color principal del logo
-      Color(0xFF9E73FF), // Un poco más claro
-      Color(0xFFAB85FF), // Aún más claro
-    ])
-  ),
+            width: double.infinity,
+            decoration: const BoxDecoration(
+                gradient: LinearGradient(begin: Alignment.topCenter, colors: [
+              Color(0xFF8A56FF), // Color principal del logo
+              Color(0xFF9E73FF), // Un poco más claro
+              Color(0xFFAB85FF), // Aún más claro
+            ])),
             child: Column(
               children: [
                 const SizedBox(height: 60),
@@ -582,24 +602,22 @@ bool _shouldShowRetryButton(String message) {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           FadeInUp(
-                            duration: const Duration(milliseconds: 1000),
-                            child: const Text(
-                              "BiPe Alerta",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 32,
-                                fontWeight: FontWeight.bold),
-                            )
-                          ),
+                              duration: const Duration(milliseconds: 1000),
+                              child: const Text(
+                                "BiPe Alerta",
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.bold),
+                              )),
                           const SizedBox(height: 10),
                           FadeInUp(
-                            duration: const Duration(milliseconds: 1300),
-                            child: const Text(
-                              "Panel de Control",
-                              style: TextStyle(
-                                color: Colors.white, fontSize: 18),
-                            )
-                          ),
+                              duration: const Duration(milliseconds: 1300),
+                              child: const Text(
+                                "Panel de Control",
+                                style: TextStyle(
+                                    color: Colors.white, fontSize: 18),
+                              )),
                         ],
                       ),
                       Row(
@@ -607,7 +625,8 @@ bool _shouldShowRetryButton(String message) {
                           Showcase(
                             key: _menuOpcionesShowcaseKey,
                             title: 'Opciones del menú',
-                            description: 'Aquí encontrarás opciones como actualizar bipes, contactar soporte o mejorar tu plan.',
+                            description:
+                                'Aquí encontrarás opciones como actualizar bipes, contactar soporte o mejorar tu plan.',
                             targetShapeBorder: const CircleBorder(),
                             tooltipActionConfig: const TooltipActionConfig(
                               position: TooltipActionPosition.inside,
@@ -626,7 +645,8 @@ bool _shouldShowRetryButton(String message) {
                               ),
                             ],
                             child: PopupMenuButton<String>(
-                              icon: const Icon(Icons.more_vert, color: Colors.white),
+                              icon: const Icon(Icons.more_vert,
+                                  color: Colors.white),
                               onSelected: (value) {
                                 switch (value) {
                                   case 'support':
@@ -644,7 +664,8 @@ bool _shouldShowRetryButton(String message) {
                                   case 'xiaomi_guide':
                                     showDialog(
                                       context: context,
-                                      builder: (context) => const XiaomiNotificationGuide(),
+                                      builder: (context) =>
+                                          const XiaomiNotificationGuide(),
                                     );
                                     break;
                                 }
@@ -654,7 +675,8 @@ bool _shouldShowRetryButton(String message) {
                                   value: 'update',
                                   child: Row(
                                     children: [
-                                      Icon(Icons.sync, color: const Color(0xFF8A56FF)),
+                                      Icon(Icons.sync,
+                                          color: const Color(0xFF8A56FF)),
                                       SizedBox(width: 8),
                                       Text('Actualizar Bipes'),
                                     ],
@@ -664,7 +686,8 @@ bool _shouldShowRetryButton(String message) {
                                   value: 'support',
                                   child: Row(
                                     children: [
-                                      Icon(Icons.support_agent, color: const Color(0xFF8A56FF)),
+                                      Icon(Icons.support_agent,
+                                          color: const Color(0xFF8A56FF)),
                                       SizedBox(width: 8),
                                       Text('Soporte'),
                                     ],
@@ -674,7 +697,8 @@ bool _shouldShowRetryButton(String message) {
                                   value: 'upgrade',
                                   child: Row(
                                     children: [
-                                      Icon(Icons.upgrade, color: const Color(0xFF8A56FF)),
+                                      Icon(Icons.upgrade,
+                                          color: const Color(0xFF8A56FF)),
                                       SizedBox(width: 8),
                                       Text('Mejorar Plan'),
                                     ],
@@ -684,7 +708,8 @@ bool _shouldShowRetryButton(String message) {
                                   value: 'xiaomi_guide',
                                   child: Row(
                                     children: [
-                                      Icon(Icons.phone_android, color: const Color(0xFF8A56FF)),
+                                      Icon(Icons.phone_android,
+                                          color: const Color(0xFF8A56FF)),
                                       SizedBox(width: 8),
                                       Text('Configuración Xiaomi/Redmi'),
                                     ],
@@ -694,7 +719,8 @@ bool _shouldShowRetryButton(String message) {
                                   value: 'tutorial',
                                   child: Row(
                                     children: [
-                                      Icon(Icons.help_outline, color: const Color(0xFF8A56FF)),
+                                      Icon(Icons.help_outline,
+                                          color: const Color(0xFF8A56FF)),
                                       SizedBox(width: 8),
                                       Text('Ver Tutorial'),
                                     ],
@@ -706,7 +732,8 @@ bool _shouldShowRetryButton(String message) {
                           Showcase(
                             key: _cerrarSesionShowcaseKey,
                             title: 'Cerrar sesión',
-                            description: 'Presiona aquí para cerrar sesión y salir de la aplicación.',
+                            description:
+                                'Presiona aquí para cerrar sesión y salir de la aplicación.',
                             targetShapeBorder: const CircleBorder(),
                             tooltipActionConfig: const TooltipActionConfig(
                               position: TooltipActionPosition.inside,
@@ -726,15 +753,18 @@ bool _shouldShowRetryButton(String message) {
                             ],
                             child: IconButton(
                               icon: _isLoggingOut
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                    ),
-                                  )
-                                : const Icon(Icons.logout, color: Colors.white),
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                                Colors.white),
+                                      ),
+                                    )
+                                  : const Icon(Icons.logout,
+                                      color: Colors.white),
                               onPressed: _isLoggingOut ? null : _handleLogout,
                             ),
                           ),
@@ -743,6 +773,59 @@ bool _shouldShowRetryButton(String message) {
                     ],
                   ),
                 ),
+                 // Botón para navegar a TrabajadoresScreen
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                child: Showcase(
+                   key: _trabajadoresShowcaseKey,
+                   title: 'Gestión de Trabajadores',
+                   description:
+                       'Aquí puedes ver la lista de trabajadores de tu negocio que usan BiPe Alerta.',
+                   targetShapeBorder: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                     tooltipActionConfig: const TooltipActionConfig(
+                      position: TooltipActionPosition.inside,
+                      alignment: MainAxisAlignment.spaceBetween,
+                    ),
+                    tooltipActions: [
+                      TooltipActionButton(
+                        type: TooltipDefaultActionType.previous,
+                        name: "Atras",
+                        textStyle: const TextStyle(color: Colors.white),
+                      ),
+                      TooltipActionButton(
+                        type: TooltipDefaultActionType.next,
+                        name: "Siguiente",
+                        textStyle: const TextStyle(color: Colors.white),
+                      ),
+                    ],
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => TrabajadoresScreen()),
+                      );
+                    },
+                    style: ElevatedButton.styleFrom(
+                      foregroundColor: Colors.white, backgroundColor: const Color(0xFF8A56FF), // Color del logo
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 5,
+                      minimumSize: const Size(double.infinity, 0), // Ancho completo
+                    ),
+                    child: const Text(
+                      'Ver Trabajadores',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
 
                 // Contenido principal con efecto curvo
                 Expanded(
@@ -750,20 +833,20 @@ bool _shouldShowRetryButton(String message) {
                     decoration: const BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(60),
-                        topRight: Radius.circular(60)
-                      ),
+                          topLeft: Radius.circular(60),
+                          topRight: Radius.circular(60)),
                     ),
                     child: SingleChildScrollView(
                       child: Column(
                         children: [
                           const SizedBox(height: 30),
-                          
+
                           // Tarjeta de información
                           Showcase(
                             key: _negocioShowcaseKey,
                             title: 'Información de Negocio',
-                            description: 'Aquí verás la información de tu negocio, tu nombre y el plan que tienes contratado.',
+                            description:
+                                'Aquí verás la información de tu negocio, tu nombre y el plan que tienes contratado.',
                             targetShapeBorder: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(20),
                             ),
@@ -784,7 +867,8 @@ bool _shouldShowRetryButton(String message) {
                               ),
                             ],
                             child: Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 20),
+                              margin:
+                                  const EdgeInsets.symmetric(horizontal: 20),
                               padding: const EdgeInsets.all(20),
                               decoration: BoxDecoration(
                                 color: Colors.white,
@@ -807,14 +891,16 @@ bool _shouldShowRetryButton(String message) {
                                   const SizedBox(width: 15),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Text(
                                           nombreNegocio,
                                           style: TextStyle(
                                             fontSize: 18,
                                             fontWeight: FontWeight.bold,
-                                            color:  Color.fromARGB(255, 76, 39, 163),
+                                            color: Color.fromARGB(
+                                                255, 76, 39, 163),
                                           ),
                                         ),
                                         const SizedBox(height: 4),
@@ -832,7 +918,8 @@ bool _shouldShowRetryButton(String message) {
                                           ),
                                           decoration: BoxDecoration(
                                             color: const Color(0xFFEEE6FF),
-                                            borderRadius: BorderRadius.circular(12),
+                                            borderRadius:
+                                                BorderRadius.circular(12),
                                           ),
                                           child: Text(
                                             nombrePlan,
@@ -854,7 +941,8 @@ bool _shouldShowRetryButton(String message) {
                           Showcase(
                             key: _permisosShowcaseKey,
                             title: 'Permisos necesarios',
-                            description: 'En esta sección puedes verificar y activar los permisos necesarios para que la aplicación funcione correctamente.',
+                            description:
+                                'En esta sección puedes verificar y activar los permisos necesarios para que la aplicación funcione correctamente.',
                             targetShapeBorder: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -881,67 +969,77 @@ bool _shouldShowRetryButton(String message) {
                           ),
 
                           // Estado de conexión
-if (_connectionMessage != null)
-  Container(
-    margin: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: _getStatusBackgroundColor(_connectionMessage!),
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(
-        color: _getStatusBorderColor(_connectionMessage!),
-        width: 1,
-      ),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(
-              _getStatusIcon(_connectionMessage!),
-              color: _getStatusIconColor(_connectionMessage!),
-              size: 20,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                _connectionMessage!,
-                style: TextStyle(
-                  color: _getStatusTextColor(_connectionMessage!),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ],
-        ),
-        
-        // Botón de reintentar si está desconectado o hay error
-        if (_shouldShowRetryButton(_connectionMessage!))
-          Padding(
-            padding: const EdgeInsets.only(top: 12.0),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _handleRetryConnection,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _getRetryButtonColor(_connectionMessage!),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-                child: const Text(
-                  'Reintentar conexión',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-          ),
-      ],
-    ),
-  ),
+                          if (_connectionMessage != null)
+                            Container(
+                              margin: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: _getStatusBackgroundColor(
+                                    _connectionMessage!),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _getStatusBorderColor(
+                                      _connectionMessage!),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        _getStatusIcon(_connectionMessage!),
+                                        color: _getStatusIconColor(
+                                            _connectionMessage!),
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Text(
+                                          _connectionMessage!,
+                                          style: TextStyle(
+                                            color: _getStatusTextColor(
+                                                _connectionMessage!),
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+
+                                  // Botón de reintentar si está desconectado o hay error
+                                  if (_shouldShowRetryButton(
+                                      _connectionMessage!))
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 12.0),
+                                      child: SizedBox(
+                                        width: double.infinity,
+                                        child: ElevatedButton(
+                                          onPressed: _handleRetryConnection,
+                                          style: ElevatedButton.styleFrom(
+                                            backgroundColor:
+                                                _getRetryButtonColor(
+                                                    _connectionMessage!),
+                                            foregroundColor: Colors.white,
+                                            padding: const EdgeInsets.symmetric(
+                                                vertical: 8),
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                          ),
+                                          child: const Text(
+                                            'Reintentar conexión',
+                                            style: TextStyle(
+                                                fontWeight: FontWeight.bold),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
 
                           const SizedBox(height: 20),
                           // Título de notificaciones
@@ -970,7 +1068,8 @@ if (_connectionMessage != null)
                           Showcase(
                             key: _notificacionesShowcaseKey,
                             title: 'Notificaciones capturadas',
-                            description: 'Aquí verás todas las notificaciones de tus apps de pagos que BiPe Alerta ha capturado y procesado.',
+                            description:
+                                'Aquí verás todas las notificaciones de tus apps de pagos que BiPe Alerta ha capturado y procesado.',
                             targetShapeBorder: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(12),
                             ),
@@ -993,45 +1092,49 @@ if (_connectionMessage != null)
                             child: Container(
                               height: 300, // Altura fija para la lista
                               child: notifications.isEmpty
-                                ? Center(
-                                    child: Column(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        Icon(
-                                          Icons.notifications_off_outlined,
-                                          size: 48,
-                                          color: Colors.grey.shade400,
-                                        ),
-                                        const SizedBox(height: 12),
-                                        Text(
-                                          'No hay notificaciones',
-                                          style: TextStyle(
-                                            color: Colors.grey.shade600,
-                                            fontSize: 16,
+                                  ? Center(
+                                      child: Column(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          Icon(
+                                            Icons.notifications_off_outlined,
+                                            size: 48,
+                                            color: Colors.grey.shade400,
                                           ),
-                                        ),
-                                      ],
+                                          const SizedBox(height: 12),
+                                          Text(
+                                            'No hay notificaciones',
+                                            style: TextStyle(
+                                              color: Colors.grey.shade600,
+                                              fontSize: 16,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    )
+                                  : ListView.builder(
+                                      padding: const EdgeInsets.all(20),
+                                      itemCount: notifications.length,
+                                      itemBuilder: (context, index) {
+                                        return Card(
+                                          elevation: 0,
+                                          margin:
+                                              const EdgeInsets.only(bottom: 12),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(12),
+                                          ),
+                                          child: ListTile(
+                                            title: Text(
+                                              notifications[index],
+                                              style:
+                                                  const TextStyle(fontSize: 14),
+                                            ),
+                                          ),
+                                        );
+                                      },
                                     ),
-                                  )
-                                : ListView.builder(
-                                    padding: const EdgeInsets.all(20),
-                                    itemCount: notifications.length,
-                                    itemBuilder: (context, index) {
-                                      return Card(
-                                        elevation: 0,
-                                        margin: const EdgeInsets.only(bottom: 12),
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(12),
-                                        ),
-                                        child: ListTile(
-                                          title: Text(
-                                            notifications[index],
-                                            style: const TextStyle(fontSize: 14),
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
                             ),
                           ),
                         ],
