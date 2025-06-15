@@ -1,3 +1,4 @@
+import 'package:animate_do/animate_do.dart';
 import 'package:bipealerta/models/TrabajadorModel.dart';
 import 'package:bipealerta/services/trabajadores_service.dart';
 import 'package:flutter/material.dart';
@@ -40,18 +41,18 @@ class _TrabajadoresScreenState extends State<TrabajadoresScreen> {
       }
     }
   }
-  
+
   // Function to show the edit worker dialog
   void _editWorker(TrabajadorModel worker) {
-    TextEditingController _nombreController =
+    TextEditingController nombreController =
         TextEditingController(text: worker.nombreTrabajador);
-    TextEditingController _apellidoController =
+    TextEditingController apellidoController =
         TextEditingController(text: worker.apellidoTrabajador);
-    TextEditingController _usuarioController =
+    TextEditingController usuarioController =
         TextEditingController(text: worker.usuario);
-    TextEditingController _contrasenaController =
+    TextEditingController contrasenaController =
         TextEditingController(text: worker.contrasena);
-    bool _estado = worker.estado == 1; // Convert int to bool
+    bool estado = worker.estado == 1; // Convert int to bool
 
     showDialog(
       context: context,
@@ -64,27 +65,27 @@ class _TrabajadoresScreenState extends State<TrabajadoresScreen> {
                 child: ListBody(
                   children: <Widget>[
                     TextField(
-                      controller: _nombreController,
+                      controller: nombreController,
                       decoration:
                           const InputDecoration(labelText: 'Nombre Trabajador'),
                     ),
                     TextField(
-                      controller: _apellidoController,
+                      controller: apellidoController,
                       decoration:
                           const InputDecoration(labelText: 'Apellido Trabajador'),
                     ),
                     TextField(
-                      controller: _usuarioController,
+                      controller: usuarioController,
                       decoration: const InputDecoration(labelText: 'Usuario'),
                     ),
                     TextField(
-                      controller: _contrasenaController,
+                      controller: contrasenaController,
                       decoration: const InputDecoration(labelText: 'Contraseña'),
                       obscureText: true, // Hide password
                     ),
                     const SizedBox(height: 16),
                     DropdownButtonFormField<bool>(
-                      value: _estado,
+                      value: estado,
                       decoration: const InputDecoration(labelText: 'Estado'),
                       items: const [
                         DropdownMenuItem(
@@ -99,7 +100,7 @@ class _TrabajadoresScreenState extends State<TrabajadoresScreen> {
                       onChanged: (bool? newValue) {
                         if (newValue != null) {
                           setState(() {
-                            _estado = newValue;
+                            estado = newValue;
                           });
                         }
                       },
@@ -119,22 +120,22 @@ class _TrabajadoresScreenState extends State<TrabajadoresScreen> {
                   onPressed: () async {
                     try {
                       // Update the worker's information
-                      worker.nombreTrabajador = _nombreController.text;
-                      worker.apellidoTrabajador = _apellidoController.text;
-                      worker.usuario = _usuarioController.text;
-                      worker.contrasena = _contrasenaController.text;
-                      worker.activo = _estado;
+                      worker.nombreTrabajador = nombreController.text;
+                      worker.apellidoTrabajador = apellidoController.text;
+                      worker.usuario = usuarioController.text;
+                      worker.contrasena = contrasenaController.text;
+                      worker.activo = estado;
 
                       // Update worker via API if id exists
                       if (worker.id != null) {
                         await _trabajadoresService.updateTrabajador(worker.id!, worker);
                       }
-                      
+
                       Navigator.of(context).pop();
                       _trabajadoresService.showToast(context, 'Trabajador actualizado correctamente');
-                      
+
                       // Refresh the worker list
-                      setState(() {});
+                      _loadTrabajadores(); // Reload the list after updating
                     } catch (e) {
                       _trabajadoresService.showToast(context, 'Error al actualizar trabajador: $e');
                     }
@@ -180,11 +181,9 @@ class _TrabajadoresScreenState extends State<TrabajadoresScreen> {
          if (worker.id != null) {
            await _trabajadoresService.deleteTrabajador(worker.id!);
          }
-        
-        setState(() {
-          workers.remove(worker);
-        });
-        
+
+        _loadTrabajadores(); // Reload the list after deleting
+
         _trabajadoresService.showToast(context, '${worker.nombreTrabajador} ${worker.apellidoTrabajador} eliminado.');
       } catch (e) {
         _trabajadoresService.showToast(context, 'Error al eliminar trabajador: $e');
@@ -195,68 +194,203 @@ class _TrabajadoresScreenState extends State<TrabajadoresScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Trabajadores'),
-        backgroundColor: Colors.blueAccent, // Example color
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadTrabajadores,
-          ),
-        ],
-      ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : workers.isEmpty
-              ? const Center(
-                  child: Text(
-                    'No hay trabajadores registrados',
-                    style: TextStyle(fontSize: 16, color: Colors.grey),
-                  ),
-                )
-              : ListView.builder(
-                  itemCount: workers.length,
-                  itemBuilder: (context, index) {
-                    final worker = workers[index];
-                    return Card(
-                      margin: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-                      child: ListTile(
-                        title: Text('${worker.nombreTrabajador} ${worker.apellidoTrabajador}'),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Usuario: ${worker.usuario}'),
-                            // Note: Displaying password is not recommended for security reasons.
-                            // You might want to remove this or handle it differently.
-                            Text('Contraseña: ${'*' * worker.contrasena.length}'),
-                            Text('Estado: ${worker.activo ? 'Activo' : 'Baja'}'),
-                          ],
-                        ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: const Icon(Icons.edit),
-                              onPressed: () => _editWorker(worker),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.delete),
-                              onPressed: () => _deleteWorker(worker),
-                            ),
-                          ],
-                        ),
+      body: Container(
+        width: double.infinity,
+        decoration: const BoxDecoration(
+            gradient: LinearGradient(begin: Alignment.topCenter, colors: [
+          Color(0xFF8A56FF), // Color principal del logo
+          Color(0xFF9E73FF), // Un poco más claro
+          Color(0xFFAB85FF), // Aún más claro
+        ])),
+        child: Column(
+          children: [
+            const SizedBox(height: 60),
+            // Header con título y botón de regreso/refrescar
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                       IconButton(
+                        icon: const Icon(Icons.arrow_back, color: Colors.white),
+                        onPressed: () {
+                          Navigator.pop(context);
+                        },
                       ),
-                    );
-                  },
+                      const SizedBox(width: 10), // Add spacing
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          FadeInUp(
+                              duration: const Duration(milliseconds: 1000),
+                              child: const Text(
+                                "Trabajadores",
+                                style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 32,
+                                    fontWeight: FontWeight.bold),
+                              )),
+                          const SizedBox(height: 5),
+                          FadeInUp(
+                              duration: const Duration(milliseconds: 1300),
+                              child: const Text(
+                                "Gestión de Personal", // Subtitle
+                                style: TextStyle(
+                                    color: Colors.white70, fontSize: 18),
+                              )),
+                        ],
+                      ),
+                    ],
+                  ),
+                  FadeInUp(
+                       duration: const Duration(milliseconds: 1000),
+                       child: IconButton(
+                        icon: const Icon(Icons.refresh, color: Colors.white),
+                        onPressed: _loadTrabajadores,
+                      ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20), // Add some space between header and content area
+
+            // Contenido principal con efecto curvo
+            Expanded(
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(60),
+                      topRight: Radius.circular(60)),
                 ),
-      floatingActionButton: FloatingActionButton(
+                child: _isLoading
+                    ? const Center(child: CircularProgressIndicator())
+                    : workers.isEmpty
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.person_off_outlined,
+                                  size: 48,
+                                  color: Colors.grey.shade400,
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'No hay trabajadores registrados',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                                const SizedBox(height: 20),
+                                ElevatedButton.icon(
+                                  onPressed: () {
+                                    // TODO: Implement add new worker functionality
+                                     _trabajadoresService.showToast(context, 'Funcionalidad de agregar trabajador por implementar');
+                                  },
+                                  icon: const Icon(Icons.add, color: Colors.white),
+                                  label: const Text('Agregar Trabajador', style: TextStyle(color: Colors.white)),
+                                   style: ElevatedButton.styleFrom(
+                                      backgroundColor: const Color(0xFF8A56FF), // Color del logo
+                                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                    ),
+                                ),
+                              ],
+                            ),
+                          )
+                        : ListView.builder(
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 30), // Adjust padding
+                            itemCount: workers.length,
+                            itemBuilder: (context, index) {
+                              final worker = workers[index];
+                              return Card(
+                                margin: const EdgeInsets.only(bottom: 15.0), // Add spacing between cards
+                                elevation: 2, // Add subtle shadow
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12), // Rounded corners
+                                ),
+                                child: Padding( // Add padding inside the card
+                                   padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+                                  child: ListTile(
+                                    contentPadding: EdgeInsets.zero, // Remove default ListTile padding
+                                    title: Text(
+                                      '${worker.nombreTrabajador} ${worker.apellidoTrabajador}',
+                                       style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.grey.shade800,
+                                       ),
+                                      ),
+                                    subtitle: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        const SizedBox(height: 4), // Add space
+                                        Text(
+                                          'Usuario: ${worker.usuario}',
+                                           style: TextStyle(color: Colors.grey.shade700),
+                                          ),
+                                        // Note: Displaying password is not recommended for security reasons.
+                                        // You might want to remove this or handle it differently.
+                                        Text(
+                                          'Contraseña: ${'*' * worker.contrasena.length}',
+                                          style: TextStyle(color: Colors.grey.shade700),
+                                          ),
+                                        const SizedBox(height: 4), // Add space
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: worker.activo ? Colors.green.shade100 : Colors.red.shade100,
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Text(
+                                            'Estado: ${worker.activo ? 'Activo' : 'Baja'}',
+                                            style: TextStyle(
+                                               color: worker.activo ? Colors.green.shade800 : Colors.red.shade800,
+                                              fontWeight: FontWeight.w500,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    trailing: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        IconButton(
+                                          icon: Icon(Icons.edit, color: Colors.blueAccent),
+                                          onPressed: () => _editWorker(worker),
+                                        ),
+                                        IconButton(
+                                          icon: Icon(Icons.delete, color: Colors.redAccent),
+                                          onPressed: () => _deleteWorker(worker),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+              ),
+            ),
+          ],
+        ),
+      ),
+       floatingActionButton: workers.isNotEmpty ? FloatingActionButton( // Only show FAB if there are workers
         onPressed: () {
           // TODO: Implement add new worker functionality
           _trabajadoresService.showToast(context, 'Funcionalidad de agregar trabajador por implementar');
         },
-        child: const Icon(Icons.add),
-        backgroundColor: Colors.blueAccent,
-      ),
+        child: const Icon(Icons.add, color: Colors.white),
+        backgroundColor: const Color(0xFF8A56FF), // Color del logo
+        elevation: 6,
+      ) : null, // Hide FAB if no workers are registered
     );
   }
 }
