@@ -144,11 +144,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Scaffold(
       body: Container(
         width: double.infinity,
-        decoration: BoxDecoration(
+        decoration: const BoxDecoration(
             gradient: LinearGradient(begin: Alignment.topCenter, colors: [
-          const Color(0xFF8A56FF),
-          const Color(0xFF9E73FF),
-          const Color(0xFFAB85FF),
+          Color(0xFF8A56FF),
+          Color(0xFF9E73FF),
+          Color(0xFFAB85FF),
         ])),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -265,10 +265,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     _verificationCodeController.clear();
                                   });
                                 },
-                                child: Text(
+                                child: const Text(
                                   "Volver atrás",
                                   style: TextStyle(
-                                    color: const Color(0xFFD4BFFF),
+                                    color: Color(0xFFD4BFFF),
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
@@ -287,8 +287,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     children: <TextSpan>[
                                       TextSpan(
                                         text: 'Escríbenos y te ayudaremos',
-                                        style: TextStyle(
-                                            color: const Color(0xFF9E73FF),
+                                        style: const TextStyle(
+                                            color: Color(0xFF9E73FF),
                                             decoration:
                                                 TextDecoration.underline),
                                         recognizer: TapGestureRecognizer()

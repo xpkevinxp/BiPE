@@ -40,7 +40,7 @@ class TrabajadoresService {
       }
 
       final response = await http.get(
-        Uri.parse('$baseUrl/trabajadores'),
+        Uri.parse('$baseUrl/usuario/trabajador'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json'
@@ -86,7 +86,7 @@ class TrabajadoresService {
       }
 
       final response = await http.post(
-        Uri.parse('$baseUrl/trabajadores'),
+        Uri.parse('$baseUrl/usuario/SaveUsuarioTrabajador/v2'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json'
@@ -132,7 +132,7 @@ class TrabajadoresService {
       }
 
       final response = await http.put(
-        Uri.parse('$baseUrl/trabajadores/$id'),
+        Uri.parse('$baseUrl/usuario/trabajador/update/v2'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json'
@@ -178,7 +178,7 @@ class TrabajadoresService {
       }
 
       final response = await http.delete(
-        Uri.parse('$baseUrl/trabajadores/$id'),
+        Uri.parse('$baseUrl/usuario/trabajador/delete?id=$id'),
         headers: {
           'Authorization': 'Bearer $token',
           'Content-Type': 'application/json'

@@ -273,7 +273,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Datos actualizados correctamente'),
-            backgroundColor: const Color(0xFF8A56FF),
+            backgroundColor: Color(0xFF8A56FF),
           ),
         );
       }
@@ -632,16 +632,16 @@ class _HomeScreenState extends State<HomeScreen> {
                               position: TooltipActionPosition.inside,
                               alignment: MainAxisAlignment.spaceBetween,
                             ),
-                            tooltipActions: [
+                            tooltipActions: const [
                               TooltipActionButton(
                                 type: TooltipDefaultActionType.previous,
                                 name: "Atras",
-                                textStyle: const TextStyle(color: Colors.white),
+                                textStyle: TextStyle(color: Colors.white),
                               ),
                               TooltipActionButton(
                                 type: TooltipDefaultActionType.next,
                                 name: "Siguiente",
-                                textStyle: const TextStyle(color: Colors.white),
+                                textStyle: TextStyle(color: Colors.white),
                               ),
                             ],
                             child: PopupMenuButton<String>(
@@ -676,7 +676,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   child: Row(
                                     children: [
                                       Icon(Icons.sync,
-                                          color: const Color(0xFF8A56FF)),
+                                          color: Color(0xFF8A56FF)),
                                       SizedBox(width: 8),
                                       Text('Actualizar Bipes'),
                                     ],
@@ -687,7 +687,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   child: Row(
                                     children: [
                                       Icon(Icons.support_agent,
-                                          color: const Color(0xFF8A56FF)),
+                                          color: Color(0xFF8A56FF)),
                                       SizedBox(width: 8),
                                       Text('Soporte'),
                                     ],
@@ -698,7 +698,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   child: Row(
                                     children: [
                                       Icon(Icons.upgrade,
-                                          color: const Color(0xFF8A56FF)),
+                                          color: Color(0xFF8A56FF)),
                                       SizedBox(width: 8),
                                       Text('Mejorar Plan'),
                                     ],
@@ -709,7 +709,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   child: Row(
                                     children: [
                                       Icon(Icons.phone_android,
-                                          color: const Color(0xFF8A56FF)),
+                                          color: Color(0xFF8A56FF)),
                                       SizedBox(width: 8),
                                       Text('Configuración Xiaomi/Redmi'),
                                     ],
@@ -720,7 +720,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   child: Row(
                                     children: [
                                       Icon(Icons.help_outline,
-                                          color: const Color(0xFF8A56FF)),
+                                          color: Color(0xFF8A56FF)),
                                       SizedBox(width: 8),
                                       Text('Ver Tutorial'),
                                     ],
@@ -739,16 +739,16 @@ class _HomeScreenState extends State<HomeScreen> {
                               position: TooltipActionPosition.inside,
                               alignment: MainAxisAlignment.spaceBetween,
                             ),
-                            tooltipActions: [
+                            tooltipActions: const [
                               TooltipActionButton(
                                 type: TooltipDefaultActionType.previous,
                                 name: "Atras",
-                                textStyle: const TextStyle(color: Colors.white),
+                                textStyle: TextStyle(color: Colors.white),
                               ),
                               TooltipActionButton(
                                 type: TooltipDefaultActionType.skip,
                                 name: "Saltar",
-                                textStyle: const TextStyle(color: Colors.white),
+                                textStyle: TextStyle(color: Colors.white),
                               ),
                             ],
                             child: IconButton(
@@ -773,59 +773,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     ],
                   ),
                 ),
-                 // Botón para navegar a TrabajadoresScreen
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                child: Showcase(
-                   key: _trabajadoresShowcaseKey,
-                   title: 'Gestión de Trabajadores',
-                   description:
-                       'Aquí puedes ver la lista de trabajadores de tu negocio que usan BiPe Alerta.',
-                   targetShapeBorder: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                     tooltipActionConfig: const TooltipActionConfig(
-                      position: TooltipActionPosition.inside,
-                      alignment: MainAxisAlignment.spaceBetween,
-                    ),
-                    tooltipActions: [
-                      TooltipActionButton(
-                        type: TooltipDefaultActionType.previous,
-                        name: "Atras",
-                        textStyle: const TextStyle(color: Colors.white),
-                      ),
-                      TooltipActionButton(
-                        type: TooltipDefaultActionType.next,
-                        name: "Siguiente",
-                        textStyle: const TextStyle(color: Colors.white),
-                      ),
-                    ],
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => TrabajadoresScreen()),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      foregroundColor: Colors.white, backgroundColor: const Color(0xFF8A56FF), // Color del logo
-                      padding: const EdgeInsets.symmetric(vertical: 15),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 5,
-                      minimumSize: const Size(double.infinity, 0), // Ancho completo
-                    ),
-                    child: const Text(
-                      'Ver Trabajadores',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
 
                 // Contenido principal con efecto curvo
                 Expanded(
@@ -854,16 +801,16 @@ class _HomeScreenState extends State<HomeScreen> {
                               position: TooltipActionPosition.inside,
                               alignment: MainAxisAlignment.spaceBetween,
                             ),
-                            tooltipActions: [
+                            tooltipActions: const [
                               TooltipActionButton(
                                 type: TooltipDefaultActionType.skip,
                                 name: "Saltar",
-                                textStyle: const TextStyle(color: Colors.white),
+                                textStyle: TextStyle(color: Colors.white),
                               ),
                               TooltipActionButton(
                                 type: TooltipDefaultActionType.next,
                                 name: "Siguiente",
-                                textStyle: const TextStyle(color: Colors.white),
+                                textStyle: TextStyle(color: Colors.white),
                               ),
                             ],
                             child: Container(
@@ -873,9 +820,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(20),
-                                boxShadow: [
+                                boxShadow: const [
                                   BoxShadow(
-                                    color: const Color(0xFFEEE6FF),
+                                    color: Color(0xFFEEE6FF),
                                     blurRadius: 10,
                                     spreadRadius: 1,
                                   ),
@@ -883,9 +830,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               child: Row(
                                 children: [
-                                  Icon(
+                                  const Icon(
                                     Icons.business,
-                                    color: const Color(0xFFAB85FF),
+                                    color: Color(0xFFAB85FF),
                                     size: 24,
                                   ),
                                   const SizedBox(width: 15),
@@ -896,7 +843,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       children: [
                                         Text(
                                           nombreNegocio,
-                                          style: TextStyle(
+                                          style: const TextStyle(
                                             fontSize: 18,
                                             fontWeight: FontWeight.bold,
                                             color: Color.fromARGB(
@@ -923,8 +870,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                           ),
                                           child: Text(
                                             nombrePlan,
-                                            style: TextStyle(
-                                              color: const Color(0xFF8A56FF),
+                                            style: const TextStyle(
+                                              color: Color(0xFF8A56FF),
                                               fontWeight: FontWeight.w500,
                                             ),
                                           ),
@@ -936,6 +883,114 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                           ),
+
+                          const SizedBox(height: 20),
+
+                          // Botón para navegar a TrabajadoresScreen
+                          Showcase(
+                            key: _trabajadoresShowcaseKey,
+                            title: 'Gestión de Trabajadores',
+                            description:
+                                'Aquí puedes ver la lista de trabajadores de tu negocio que usan BiPe Alerta.',
+                            targetShapeBorder: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            tooltipActionConfig: const TooltipActionConfig(
+                              position: TooltipActionPosition.inside,
+                              alignment: MainAxisAlignment.spaceBetween,
+                            ),
+                            tooltipActions: const [
+                              TooltipActionButton(
+                                type: TooltipDefaultActionType.previous,
+                                name: "Atras",
+                                textStyle: TextStyle(color: Colors.white),
+                              ),
+                              TooltipActionButton(
+                                type: TooltipDefaultActionType.next,
+                                name: "Siguiente",
+                                textStyle: TextStyle(color: Colors.white),
+                              ),
+                            ],
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 20),
+                              padding: const EdgeInsets.all(20),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: const [
+                                  BoxShadow(
+                                    color: Color(0xFFEEE6FF),
+                                    blurRadius: 10,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              ),
+                              child: InkWell(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                        builder: (context) => const TrabajadoresScreen()),
+                                  );
+                                },
+                                borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  padding: const EdgeInsets.all(16),
+                                  decoration: BoxDecoration(
+                                    gradient: const LinearGradient(
+                                      colors: [
+                                        Color(0xFF8A56FF),
+                                        Color(0xFF9E73FF),
+                                      ],
+                                      begin: Alignment.centerLeft,
+                                      end: Alignment.centerRight,
+                                    ),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.group,
+                                        color: Colors.white,
+                                        size: 24,
+                                      ),
+                                      const SizedBox(width: 15),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            const Text(
+                                              'Gestión de Trabajadores',
+                                              style: TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              'Ver lista de trabajadores',
+                                              style: TextStyle(
+                                                color: Colors.white.withOpacity(0.9),
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const Icon(
+                                        Icons.arrow_forward_ios,
+                                        color: Colors.white,
+                                        size: 16,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 20),
 
                           // Widget de Permisos
                           Showcase(
@@ -950,16 +1005,16 @@ class _HomeScreenState extends State<HomeScreen> {
                               position: TooltipActionPosition.inside,
                               alignment: MainAxisAlignment.spaceBetween,
                             ),
-                            tooltipActions: [
+                            tooltipActions: const [
                               TooltipActionButton(
                                 type: TooltipDefaultActionType.previous,
                                 name: "Atras",
-                                textStyle: const TextStyle(color: Colors.white),
+                                textStyle: TextStyle(color: Colors.white),
                               ),
                               TooltipActionButton(
                                 type: TooltipDefaultActionType.next,
                                 name: "Siguiente",
-                                textStyle: const TextStyle(color: Colors.white),
+                                textStyle: TextStyle(color: Colors.white),
                               ),
                             ],
                             child: PermissionsWidget(
@@ -1077,19 +1132,19 @@ class _HomeScreenState extends State<HomeScreen> {
                               position: TooltipActionPosition.outside,
                               alignment: MainAxisAlignment.spaceBetween,
                             ),
-                            tooltipActions: [
+                            tooltipActions: const [
                               TooltipActionButton(
                                 type: TooltipDefaultActionType.previous,
                                 name: "Atras",
-                                textStyle: const TextStyle(color: Colors.white),
+                                textStyle: TextStyle(color: Colors.white),
                               ),
                               TooltipActionButton(
                                 type: TooltipDefaultActionType.next,
                                 name: "Siguiente",
-                                textStyle: const TextStyle(color: Colors.white),
+                                textStyle: TextStyle(color: Colors.white),
                               ),
                             ],
-                            child: Container(
+                            child: SizedBox(
                               height: 300, // Altura fija para la lista
                               child: notifications.isEmpty
                                   ? Center(

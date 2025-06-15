@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class XiaomiNotificationGuide extends StatelessWidget {
-  const XiaomiNotificationGuide({Key? key}) : super(key: key);
+  const XiaomiNotificationGuide({super.key});
 
   @override
   Widget build(BuildContext context) {

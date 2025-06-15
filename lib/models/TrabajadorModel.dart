@@ -1,42 +1,32 @@
 class TrabajadorModel {
   int? id;
-  String nombreTrabajador;
-  String apellidoTrabajador;
+  String nombre;
   String usuario;
-  String contrasena;
-  int estado;
+  String password;
+  int idNegocio;  
 
   TrabajadorModel({
     this.id,
-    required this.nombreTrabajador,
-    required this.apellidoTrabajador,
+    required this.nombre,
     required this.usuario,
-    required this.contrasena,
-    required this.estado,
+    required this.password,
+    required this.idNegocio,
   });
 
   TrabajadorModel.fromJson(Map<String, dynamic> json)
       : id = json['id'],
-        nombreTrabajador = json['nombreTrabajador'],
-        apellidoTrabajador = json['apellidoTrabajador'],
+        nombre = json['nombre'],
         usuario = json['usuario'],
-        contrasena = json['contrasena'],
-        estado = json['estado'];
+        password = json['password'],
+        idNegocio = json['idNegocio'];
 
   Map<String, dynamic> toJson() {
     return {
       if (id != null) 'id': id,
-      'nombreTrabajador': nombreTrabajador,
-      'apellidoTrabajador': apellidoTrabajador,
+      'nombre': nombre,
       'usuario': usuario,
-      'contrasena': contrasena,
-      'estado': estado,
+      'password': password,
+      'idNegocio': idNegocio,
     };
-  }
-
-  bool get activo => estado == 1;
-  
-  set activo(bool value) {
-    estado = value ? 1 : 0;
   }
 }

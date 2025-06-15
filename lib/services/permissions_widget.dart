@@ -5,10 +5,10 @@ class PermissionsWidget extends StatelessWidget {
   final Function(String) onRequestPermission;
 
   const PermissionsWidget({
-    Key? key,
+    super.key,
     required this.permissions,
     required this.onRequestPermission,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
