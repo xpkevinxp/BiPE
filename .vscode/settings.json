@@ -1,4 +1,6 @@
 {
+    "files.autoSave": "afterDelay",
+    "dart.flutterHotReloadOnSave": "all",
     "IDX.aI.enableInlineCompletion": true,
     "IDX.aI.enableCodebaseIndexing": true
 }

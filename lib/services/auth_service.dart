@@ -16,6 +16,7 @@ class AuthService {
   static const String nombreNegocioKey = 'nombreNegocio';
   static const String nombrePlanKey = 'nombrePlan';
   static const String bipesKey = 'bipes';
+  static const String idPlanKey = 'idPlan';
 
   void showToast(BuildContext context, String message) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -84,7 +85,7 @@ class AuthService {
       await prefs.setString(nombreKey, usuario['nombre']);
       await prefs.setString(nombreNegocioKey, usuario['nombreNegocio']);
       await prefs.setString(nombrePlanKey, usuario['nombrePlan']);
-
+      await prefs.setInt(idPlanKey, usuario['idPlan']);
       // Guardar bipes
       final bipes = userData['bipes'];
       await prefs.setString(bipesKey, jsonEncode(bipes));
@@ -106,6 +107,7 @@ class AuthService {
       await prefs.remove(nombreNegocioKey);
       await prefs.remove(nombrePlanKey);
       await prefs.remove(bipesKey);
+      await prefs.remove(idPlanKey);
     } catch (e) {
       print('Error limpiando datos: $e');
     }
@@ -206,5 +208,15 @@ class AuthService {
 
     final List<dynamic> bipesJson = jsonDecode(bipesString);
     return bipesJson.map((json) => Bipe.fromJson(json)).toList();
+  }
+
+  Future<int?> getIdPlan() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(idPlanKey);
+  }
+
+  Future<int?> getIdNegocio() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(businessIdKey);
   }
 }
