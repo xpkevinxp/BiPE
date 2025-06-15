@@ -4,7 +4,7 @@ import 'package:bipealerta/services/trabajadores_service.dart';
 import 'package:flutter/material.dart';
 
 class TrabajadoresScreen extends StatefulWidget {
-  const TrabajadoresScreen({Key? key}) : super(key: key);
+  const TrabajadoresScreen({super.key});
 
   @override
   _TrabajadoresScreenState createState() => _TrabajadoresScreenState();
@@ -363,11 +363,11 @@ class _TrabajadoresScreenState extends State<TrabajadoresScreen> {
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
                                         IconButton(
-                                          icon: Icon(Icons.edit, color: Colors.blueAccent),
+                                          icon: const Icon(Icons.edit, color: Colors.blueAccent),
                                           onPressed: () => _editWorker(worker),
                                         ),
                                         IconButton(
-                                          icon: Icon(Icons.delete, color: Colors.redAccent),
+                                          icon: const Icon(Icons.delete, color: Colors.redAccent),
                                           onPressed: () => _deleteWorker(worker),
                                         ),
                                       ],
@@ -387,9 +387,9 @@ class _TrabajadoresScreenState extends State<TrabajadoresScreen> {
           // TODO: Implement add new worker functionality
           _trabajadoresService.showToast(context, 'Funcionalidad de agregar trabajador por implementar');
         },
-        child: const Icon(Icons.add, color: Colors.white),
         backgroundColor: const Color(0xFF8A56FF), // Color del logo
         elevation: 6,
+        child: const Icon(Icons.add, color: Colors.white),
       ) : null, // Hide FAB if no workers are registered
     );
   }

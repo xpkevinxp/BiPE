@@ -273,7 +273,7 @@ class _HomeScreenState extends State<HomeScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Datos actualizados correctamente'),
-            backgroundColor: const Color(0xFF8A56FF),
+            backgroundColor: Color(0xFF8A56FF),
           ),
         );
       }
@@ -632,16 +632,16 @@ class _HomeScreenState extends State<HomeScreen> {
                               position: TooltipActionPosition.inside,
                               alignment: MainAxisAlignment.spaceBetween,
                             ),
-                            tooltipActions: [
+                            tooltipActions: const [
                               TooltipActionButton(
                                 type: TooltipDefaultActionType.previous,
                                 name: "Atras",
-                                textStyle: const TextStyle(color: Colors.white),
+                                textStyle: TextStyle(color: Colors.white),
                               ),
                               TooltipActionButton(
                                 type: TooltipDefaultActionType.next,
                                 name: "Siguiente",
-                                textStyle: const TextStyle(color: Colors.white),
+                                textStyle: TextStyle(color: Colors.white),
                               ),
                             ],
                             child: PopupMenuButton<String>(
@@ -676,7 +676,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   child: Row(
                                     children: [
                                       Icon(Icons.sync,
-                                          color: const Color(0xFF8A56FF)),
+                                          color: Color(0xFF8A56FF)),
                                       SizedBox(width: 8),
                                       Text('Actualizar Bipes'),
                                     ],
@@ -687,7 +687,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   child: Row(
                                     children: [
                                       Icon(Icons.support_agent,
-                                          color: const Color(0xFF8A56FF)),
+                                          color: Color(0xFF8A56FF)),
                                       SizedBox(width: 8),
                                       Text('Soporte'),
                                     ],
@@ -698,7 +698,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   child: Row(
                                     children: [
                                       Icon(Icons.upgrade,
-                                          color: const Color(0xFF8A56FF)),
+                                          color: Color(0xFF8A56FF)),
                                       SizedBox(width: 8),
                                       Text('Mejorar Plan'),
                                     ],
@@ -709,7 +709,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   child: Row(
                                     children: [
                                       Icon(Icons.phone_android,
-                                          color: const Color(0xFF8A56FF)),
+                                          color: Color(0xFF8A56FF)),
                                       SizedBox(width: 8),
                                       Text('Configuración Xiaomi/Redmi'),
                                     ],
@@ -720,7 +720,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   child: Row(
                                     children: [
                                       Icon(Icons.help_outline,
-                                          color: const Color(0xFF8A56FF)),
+                                          color: Color(0xFF8A56FF)),
                                       SizedBox(width: 8),
                                       Text('Ver Tutorial'),
                                     ],
@@ -739,16 +739,16 @@ class _HomeScreenState extends State<HomeScreen> {
                               position: TooltipActionPosition.inside,
                               alignment: MainAxisAlignment.spaceBetween,
                             ),
-                            tooltipActions: [
+                            tooltipActions: const [
                               TooltipActionButton(
                                 type: TooltipDefaultActionType.previous,
                                 name: "Atras",
-                                textStyle: const TextStyle(color: Colors.white),
+                                textStyle: TextStyle(color: Colors.white),
                               ),
                               TooltipActionButton(
                                 type: TooltipDefaultActionType.skip,
                                 name: "Saltar",
-                                textStyle: const TextStyle(color: Colors.white),
+                                textStyle: TextStyle(color: Colors.white),
                               ),
                             ],
                             child: IconButton(
@@ -801,16 +801,16 @@ class _HomeScreenState extends State<HomeScreen> {
                               position: TooltipActionPosition.inside,
                               alignment: MainAxisAlignment.spaceBetween,
                             ),
-                            tooltipActions: [
+                            tooltipActions: const [
                               TooltipActionButton(
                                 type: TooltipDefaultActionType.skip,
                                 name: "Saltar",
-                                textStyle: const TextStyle(color: Colors.white),
+                                textStyle: TextStyle(color: Colors.white),
                               ),
                               TooltipActionButton(
                                 type: TooltipDefaultActionType.next,
                                 name: "Siguiente",
-                                textStyle: const TextStyle(color: Colors.white),
+                                textStyle: TextStyle(color: Colors.white),
                               ),
                             ],
                             child: Container(
@@ -820,9 +820,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(20),
-                                boxShadow: [
+                                boxShadow: const [
                                   BoxShadow(
-                                    color: const Color(0xFFEEE6FF),
+                                    color: Color(0xFFEEE6FF),
                                     blurRadius: 10,
                                     spreadRadius: 1,
                                   ),
@@ -830,9 +830,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               child: Row(
                                 children: [
-                                  Icon(
+                                  const Icon(
                                     Icons.business,
-                                    color: const Color(0xFFAB85FF),
+                                    color: Color(0xFFAB85FF),
                                     size: 24,
                                   ),
                                   const SizedBox(width: 15),
@@ -843,7 +843,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       children: [
                                         Text(
                                           nombreNegocio,
-                                          style: TextStyle(
+                                          style: const TextStyle(
                                             fontSize: 18,
                                             fontWeight: FontWeight.bold,
                                             color: Color.fromARGB(
@@ -870,8 +870,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                           ),
                                           child: Text(
                                             nombrePlan,
-                                            style: TextStyle(
-                                              color: const Color(0xFF8A56FF),
+                                            style: const TextStyle(
+                                              color: Color(0xFF8A56FF),
                                               fontWeight: FontWeight.w500,
                                             ),
                                           ),
@@ -899,16 +899,16 @@ class _HomeScreenState extends State<HomeScreen> {
                               position: TooltipActionPosition.inside,
                               alignment: MainAxisAlignment.spaceBetween,
                             ),
-                            tooltipActions: [
+                            tooltipActions: const [
                               TooltipActionButton(
                                 type: TooltipDefaultActionType.previous,
                                 name: "Atras",
-                                textStyle: const TextStyle(color: Colors.white),
+                                textStyle: TextStyle(color: Colors.white),
                               ),
                               TooltipActionButton(
                                 type: TooltipDefaultActionType.next,
                                 name: "Siguiente",
-                                textStyle: const TextStyle(color: Colors.white),
+                                textStyle: TextStyle(color: Colors.white),
                               ),
                             ],
                             child: Container(
@@ -917,9 +917,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(20),
-                                boxShadow: [
+                                boxShadow: const [
                                   BoxShadow(
-                                    color: const Color(0xFFEEE6FF),
+                                    color: Color(0xFFEEE6FF),
                                     blurRadius: 10,
                                     spreadRadius: 1,
                                   ),
@@ -930,7 +930,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                        builder: (context) => TrabajadoresScreen()),
+                                        builder: (context) => const TrabajadoresScreen()),
                                   );
                                 },
                                 borderRadius: BorderRadius.circular(12),
@@ -1005,16 +1005,16 @@ class _HomeScreenState extends State<HomeScreen> {
                               position: TooltipActionPosition.inside,
                               alignment: MainAxisAlignment.spaceBetween,
                             ),
-                            tooltipActions: [
+                            tooltipActions: const [
                               TooltipActionButton(
                                 type: TooltipDefaultActionType.previous,
                                 name: "Atras",
-                                textStyle: const TextStyle(color: Colors.white),
+                                textStyle: TextStyle(color: Colors.white),
                               ),
                               TooltipActionButton(
                                 type: TooltipDefaultActionType.next,
                                 name: "Siguiente",
-                                textStyle: const TextStyle(color: Colors.white),
+                                textStyle: TextStyle(color: Colors.white),
                               ),
                             ],
                             child: PermissionsWidget(
@@ -1132,19 +1132,19 @@ class _HomeScreenState extends State<HomeScreen> {
                               position: TooltipActionPosition.outside,
                               alignment: MainAxisAlignment.spaceBetween,
                             ),
-                            tooltipActions: [
+                            tooltipActions: const [
                               TooltipActionButton(
                                 type: TooltipDefaultActionType.previous,
                                 name: "Atras",
-                                textStyle: const TextStyle(color: Colors.white),
+                                textStyle: TextStyle(color: Colors.white),
                               ),
                               TooltipActionButton(
                                 type: TooltipDefaultActionType.next,
                                 name: "Siguiente",
-                                textStyle: const TextStyle(color: Colors.white),
+                                textStyle: TextStyle(color: Colors.white),
                               ),
                             ],
-                            child: Container(
+                            child: SizedBox(
                               height: 300, // Altura fija para la lista
                               child: notifications.isEmpty
                                   ? Center(
