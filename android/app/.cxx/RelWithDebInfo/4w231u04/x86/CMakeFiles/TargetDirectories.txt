@@ -1,2 +1,0 @@
-/home/user/myapp/android/app/.cxx/RelWithDebInfo/4w231u04/x86/CMakeFiles/edit_cache.dir
-/home/user/myapp/android/app/.cxx/RelWithDebInfo/4w231u04/x86/CMakeFiles/rebuild_cache.dir

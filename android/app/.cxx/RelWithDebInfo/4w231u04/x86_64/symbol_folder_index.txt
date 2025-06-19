@@ -1,1 +1,0 @@
-/home/user/myapp/build/app/intermediates/cxx/RelWithDebInfo/4w231u04/obj/x86_64
