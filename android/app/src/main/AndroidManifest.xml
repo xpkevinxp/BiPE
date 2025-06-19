@@ -22,7 +22,11 @@
         android:enableOnBackInvokedCallback="true"
         android:label="BiPeAlerta"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:supportsRtl="true"
+        android:requestLegacyExternalStorage="false"
+        android:largeHeap="true"
+        android:hardwareAccelerated="true">
 
         <!-- Servicio de escucha de notificaciones -->
         <service 
@@ -76,6 +80,11 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+            
+        <!-- Soporte para páginas de 16KB (Android 15+) -->
+        <meta-data
+            android:name="android.app.supports_16kb_pages"
+            android:value="true" />
     </application>
 
     <queries>

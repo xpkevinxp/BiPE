@@ -10,13 +10,9 @@ import 'screens/home_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Configuración para Android 15
-  SystemChrome.setSystemUIOverlayStyle(
-    const SystemUiOverlayStyle(
-      systemNavigationBarColor: Colors.transparent,
-      statusBarColor: Colors.transparent,
-      systemNavigationBarDividerColor: Colors.transparent,
-    ),
+  // Configuración moderna para Android 15+ (Edge-to-edge)
+  SystemChrome.setEnabledSystemUIMode(
+    SystemUiMode.edgeToEdge,
   );
 
   // Inicializar el servicio en segundo plano
@@ -82,9 +78,9 @@ class MyApp extends StatelessWidget {
   colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF8A56FF)),
   useMaterial3: true,
   appBarTheme: const AppBarTheme(
-    systemOverlayStyle: SystemUiOverlayStyle.light,
     backgroundColor: Colors.transparent,
     elevation: 0,
+    foregroundColor: Colors.black,
   ),
   scaffoldBackgroundColor: Colors.white,
 ),
