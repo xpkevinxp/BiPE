@@ -44,6 +44,7 @@ class _HomeScreenState extends State<HomeScreen> {
   var nombreNegocio = "";
   var nombrePlan = "";
   bool _isUpdating = false;
+  bool _tutorialActive = false;
 
   @override
   void initState() {
@@ -63,6 +64,10 @@ class _HomeScreenState extends State<HomeScreen> {
     bool tutorialShown = prefs.getBool('tutorial_shown') ?? false;
 
     if (!tutorialShown && mounted) {
+      setState(() {
+        _tutorialActive = true;
+      });
+      
       await Future.delayed(const Duration(milliseconds: 500));
 
       ShowCaseWidget.of(context).startShowCase([
@@ -77,22 +82,104 @@ class _HomeScreenState extends State<HomeScreen> {
       // Marcar que el tutorial ya se mostró
       await prefs.setBool('tutorial_shown', true);
       
-      // Después del tutorial, mostrar el "¿Cómo funciona?" si no se ha mostrado antes
+      // Esperar un poco y luego mostrar "¿Cómo funciona?" después del tutorial
+      _checkTutorialCompletion();
+    } else {
+      // Si el tutorial ya se mostró antes, verificar si necesitamos mostrar "¿Cómo funciona?"
       await _showHowItWorksIfNeeded();
     }
   }
 
+  void _checkTutorialCompletion() {
+    // Comprobar si el tutorial realmente ha terminado por completo, no solo un paso
+    Timer.periodic(const Duration(milliseconds: 500), (timer) async {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        bool tutorialCompleted = prefs.getBool('tutorial_completed_now') ?? false;
+        
+        // Solo considerar completado cuando la bandera está establecida (onFinish se ha disparado)
+        if (tutorialCompleted) {
+          timer.cancel();
+          
+          // Asegurarse de que no se muestre inmediatamente después del último paso
+          // esperar un poco para que la UI del tutorial desaparezca completamente
+          await Future.delayed(const Duration(seconds: 1));
+          
+          if (mounted && _tutorialActive) {
+            setState(() {
+              _tutorialActive = false;
+            });
+            
+            // Limpiar la bandera
+            await prefs.remove('tutorial_completed_now');
+            
+            // Mostrar "¿Cómo funciona?" solo después de que todo el tutorial haya terminado
+            await Future.delayed(const Duration(milliseconds: 500));
+            _showHowItWorksIfNeeded();
+          }
+        }
+      } catch (e) {
+        print("Error al verificar fin del tutorial: $e");
+      }
+    });
+    
+    // Timeout como último recurso (ahora más largo para dar tiempo al usuario)
+    Timer(const Duration(seconds: 60), () {
+      if (mounted && _tutorialActive) {
+        print("Timeout del tutorial alcanzado");
+        setState(() {
+          _tutorialActive = false;
+        });
+        _showHowItWorksIfNeeded();
+      }
+    });
+  }
+
   Future<void> _showHowItWorksIfNeeded() async {
+    // Verificar que no estemos en el tutorial
+    if (_tutorialActive) {
+      print("No se muestra 'Cómo funciona' porque el tutorial está activo");
+      return;
+    }
+  
     final prefs = await SharedPreferences.getInstance();
     bool howItWorksShown = prefs.getBool('how_it_works_shown') ?? false;
-
-    if (!howItWorksShown && mounted) {
-      // Esperar un poco después del tutorial
-      await Future.delayed(const Duration(milliseconds: 2000));
+    
+    // Verificar de nuevo todas las condiciones
+    if (!howItWorksShown && mounted && !_tutorialActive) {
+      // Doble verificación para asegurarnos que el tutorial no está activo
+      bool tutorialRunning = false;
+      try {
+        // Intentar detectar si el tutorial está visible de alguna manera
+        final showcase = ShowCaseWidget.of(context);
+        // Si llegamos aquí y no hay excepciones, verificamos las preferencias
+        bool tutorialShown = prefs.getBool('tutorial_shown') ?? false;
+        if (!tutorialShown) {
+          tutorialRunning = true;
+        }
+      } catch (e) {
+        // Si hay excepción, probablemente el tutorial no está activo
+      }
       
-      if (mounted) {
+      if (tutorialRunning) {
+        print("Tutorial detectado como activo, no se muestra 'Cómo funciona'");
+        return;
+      }
+      
+      // Esperar un poco más para asegurarnos que no hay conflicto con la UI
+      await Future.delayed(const Duration(milliseconds: 1500));
+      
+      // Verificar por última vez antes de mostrar
+      if (mounted && !_tutorialActive) {
+        print("Mostrando widget 'Cómo funciona'");
         showDialog(
           context: context,
+          barrierDismissible: true,  // Permitir cerrar tocando fuera
           builder: (context) => const HowItWorksWidget(),
         );
 
@@ -104,6 +191,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Implementar un método para iniciar el tutorial manualmente
   void _reiniciarTutorial() {
+    setState(() {
+      _tutorialActive = true;
+    });
+    
     ShowCaseWidget.of(context).startShowCase([
       _negocioShowcaseKey,
       _permisosShowcaseKey,
@@ -112,6 +203,18 @@ class _HomeScreenState extends State<HomeScreen> {
       _panelWebShowcaseKey,
       _cerrarSesionShowcaseKey,
     ]);
+    
+    _checkTutorialCompletion();
+  }
+  
+  // Método para terminar manualmente el tutorial
+  void _finalizarTutorial() {
+    if (_tutorialActive) {
+      setState(() {
+        _tutorialActive = false;
+      });
+      _showHowItWorksIfNeeded();
+    }
   }
 
   Future<void> _checkPermissions() async {
@@ -376,16 +479,26 @@ class _HomeScreenState extends State<HomeScreen> {
             bool? dialogShown = prefs.getBool('xiaomi_dialog_shown');
 
             if (dialogShown != true) {
-              showDialog(
-                context: context,
-                builder: (context) => const XiaomiNotificationGuide(),
-              ).then((_) async {
-                // Marcar que el diálogo ya se mostró
+              // Verificar primero si el tutorial está activo para evitar conflictos
+              if (_tutorialActive) {
+                // Si el tutorial está activo, solo marcar que se mostró para la próxima vez
                 prefs.setBool('xiaomi_dialog_shown', true);
-                
-                // Mostrar "¿Cómo funciona?" después del diálogo Xiaomi
-                await _showHowItWorksIfNeeded();
-              });
+              } else {
+                showDialog(
+                  context: context,
+                  builder: (context) => const XiaomiNotificationGuide(),
+                ).then((_) async {
+                  // Marcar que el diálogo ya se mostró
+                  prefs.setBool('xiaomi_dialog_shown', true);
+                  
+                  // Mostrar "¿Cómo funciona?" después del diálogo Xiaomi solo si no hay tutorial activo
+                  // Esperar un poco más para evitar problemas
+                  await Future.delayed(const Duration(seconds: 1));
+                  if (!_tutorialActive && mounted) {
+                    await _showHowItWorksIfNeeded();
+                  }
+                });
+              }
             }
           });
         });
@@ -437,7 +550,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _abrirWhatsAppSoporte() async {
     final whatsappUri = Uri.parse(
-        "https://wa.me/51930429628?text=Hola,%20necesito%20soporte%20técnico");
+        "https://wa.me/51901089996?text=Hola,%20necesito%20soporte%20técnico");
 
     try {
       if (await canLaunchUrl(whatsappUri)) {
@@ -466,7 +579,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _abrirWhatsAppUpgrade() async {
     final whatsappUri = Uri.parse(
-        "https://wa.me/51930429628?text=Hola,%20quisiera%20información%20sobre%20los%20planes%20premium");
+        "https://wa.me/51901089996?text=Hola,%20quisiera%20información%20sobre%20los%20planes%20premium");
 
     try {
       if (await canLaunchUrl(whatsappUri)) {

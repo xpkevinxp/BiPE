@@ -435,7 +435,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
   void _launchWhatsApp() async {
     final whatsappUri = Uri.parse(
-        "https://wa.me/51930429628?text=Hola,%20quisiera%20ayuda%20con%20mi%20registro");
+        "https://wa.me/51901089996?text=Hola,%20quisiera%20ayuda%20con%20mi%20registro");
 
     try {
       if (await canLaunchUrl(whatsappUri)) {

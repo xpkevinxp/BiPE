@@ -55,9 +55,16 @@ void main() async {
     builder: (context) => MyApp(isLoggedIn: token != null),
     autoPlay: false,
     autoPlayDelay: const Duration(seconds: 3),
+    onFinish: () {
+      print('Todo el tutorial completado');
+      // Guardar en SharedPreferences que el tutorial ha terminado completamente
+      SharedPreferences.getInstance().then((prefs) {
+        prefs.setBool('tutorial_completed_now', true);
+      });
+    },
     onComplete: (index, key) {
-      print('Showcase completado: índice $index, key $key');
-      // No podemos acceder a los elementos de HomeScreen aquí
+      // Este callback se activa en cada paso, no lo usamos para determinar el fin del tutorial
+      print('Paso del showcase completado: índice $index, key $key');
     },
   ));
 }

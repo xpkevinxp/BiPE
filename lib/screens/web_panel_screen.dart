@@ -57,7 +57,7 @@ class _WebPanelScreenState extends State<WebPanelScreen> {
           },
         ),
       )
-      ..loadRequest(Uri.parse('https://bipealerta.com/login'));
+      ..loadRequest(Uri.parse('https://bipealerta.com/login/1'));
   }
 
   void _updatePageTitle() async {
@@ -91,7 +91,7 @@ class _WebPanelScreenState extends State<WebPanelScreen> {
     
     // Solo mostrar mensaje si estamos exactamente en /login
     // Si está en /menu u otra ruta, significa que ya está logueado
-    return uri.path == '/login' || uri.path == '/login/';
+    return uri.path == '/login/1' || uri.path == '/login/1/';
   }
 
   void _startUrlMonitoring() {
