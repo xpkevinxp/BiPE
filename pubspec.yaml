@@ -50,6 +50,9 @@ dependencies:
   in_app_update: ^4.2.3
   device_info_plus: ^9.0.0
   showcaseview: ^4.0.1
+  webview_flutter: ^4.4.2
+  share_plus: ^10.1.1
+  app_settings: ^5.1.1
   
 dev_dependencies:
   flutter_test:

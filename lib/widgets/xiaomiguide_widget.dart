@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter/services.dart';
 
 class XiaomiNotificationGuide extends StatelessWidget {
   const XiaomiNotificationGuide({super.key});
@@ -28,7 +28,7 @@ class XiaomiNotificationGuide extends StatelessWidget {
             ),
             const SizedBox(height: 15),
             const Text(
-              'Para que BiPe Alerta funcione correctamente, se requiere una configuración adicional:'
+              'Para que BiPe Alerta funcione correctamente, necesitas activar el permiso especial de notificaciones:'
             ),
             const SizedBox(height: 10),
             Container(
@@ -40,10 +40,10 @@ class XiaomiNotificationGuide extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildStep('1', 'Ir a Configuración del teléfono'),
-                  _buildStep('2', 'Buscar "Notificaciones"'),
-                  _buildStep('3', 'Entrar en "Notificaciones de apps y dispositivos"'),
-                  _buildStep('4', 'Activar permiso para "Servicios de Google Play"'),
+                  _buildStep('1', 'El botón te llevará a "Notificaciones de apps y dispositivos"'),
+                  _buildStep('2', 'Buscar "BiPe Alerta" en la lista'),
+                  _buildStep('3', 'Activar el permiso para "BiPe Alerta"'),
+                  _buildStep('4', 'Confirmar que está activado (aparecerá en la lista)'),
                 ],
               ),
             ),
@@ -60,8 +60,8 @@ class XiaomiNotificationGuide extends StatelessWidget {
                   Icon(Icons.info_outline, color: Colors.orange.shade700),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text(
-                      'Sin esta configuración, la aplicación no podrá detectar todas las notificaciones correctamente.',
+                    child:                     Text(
+                      'Este permiso es esencial para que BiPe Alerta pueda detectar las notificaciones de Yape, Plin y otras apps de pago.',
                       style: TextStyle(
                         color: Colors.orange.shade900,
                         fontSize: 13,
@@ -87,7 +87,7 @@ class XiaomiNotificationGuide extends StatelessWidget {
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.green.shade600,
           ),
-          child: const Text('Ir a Configuración', style: TextStyle(color: Colors.white)),
+          child: const Text('Ir a Permisos Especiales', style: TextStyle(color: Colors.white)),
         ),
       ],
     );
@@ -122,19 +122,27 @@ class XiaomiNotificationGuide extends StatelessWidget {
   }
 
   void _openSettings() async {
-    // Intentar abrir directamente la configuración de notificaciones
-    const settingsUri = 'android-app://com.android.settings/notification_listener_settings';
-    final uri = Uri.parse(settingsUri);
+    const platform = MethodChannel('com.centralizador.bipealerta/settings');
     
     try {
-      if (await canLaunchUrl(uri)) {
-        await launchUrl(uri);
-      } else {
-        // Alternativa: abrir configuración general
-        await launchUrl(Uri.parse('package:com.android.settings'));
-      }
+      // Intentar abrir directamente la configuración de Notification Listener
+      await platform.invokeMethod('openNotificationListenerSettings');
     } catch (e) {
-      print('No se pudo abrir la configuración: $e');
+      print('No se pudo abrir Notification Listener Settings: $e');
+      
+      try {
+        // Segundo intento: abrir la configuración de notificaciones generales
+        await platform.invokeMethod('openNotificationSettings');
+      } catch (e2) {
+        print('No se pudo abrir configuración de notificaciones: $e2');
+        
+        try {
+          // Último intento: abrir configuración de la aplicación
+          await platform.invokeMethod('openAppSettings');
+        } catch (e3) {
+          print('No se pudo abrir ninguna configuración: $e3');
+        }
+      }
     }
   }
 }

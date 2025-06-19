@@ -13,7 +13,8 @@ import 'dart:async';
 import '../services/auth_service.dart';
 import '../services/background_service.dart';
 import '../services/permission_service.dart';
-import 'trabajadores_screen.dart'; // Import the new screen
+import '../widgets/how_it_works_widget.dart';
+import 'web_panel_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -28,7 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final GlobalKey _permisosShowcaseKey = GlobalKey();
   final GlobalKey _notificacionesShowcaseKey = GlobalKey();
   final GlobalKey _menuOpcionesShowcaseKey = GlobalKey();
-  final GlobalKey _trabajadoresShowcaseKey = GlobalKey(); // New key for the button
+  final GlobalKey _panelWebShowcaseKey = GlobalKey(); // Key for web panel button
   final GlobalKey _cerrarSesionShowcaseKey = GlobalKey();
 
   final AuthService _authService = AuthService();
@@ -69,12 +70,35 @@ class _HomeScreenState extends State<HomeScreen> {
         _permisosShowcaseKey,
         _notificacionesShowcaseKey,
         _menuOpcionesShowcaseKey,
-        _trabajadoresShowcaseKey, // Add the new key
+        _panelWebShowcaseKey,
         _cerrarSesionShowcaseKey,
       ]);
 
       // Marcar que el tutorial ya se mostró
       await prefs.setBool('tutorial_shown', true);
+      
+      // Después del tutorial, mostrar el "¿Cómo funciona?" si no se ha mostrado antes
+      await _showHowItWorksIfNeeded();
+    }
+  }
+
+  Future<void> _showHowItWorksIfNeeded() async {
+    final prefs = await SharedPreferences.getInstance();
+    bool howItWorksShown = prefs.getBool('how_it_works_shown') ?? false;
+
+    if (!howItWorksShown && mounted) {
+      // Esperar un poco después del tutorial
+      await Future.delayed(const Duration(milliseconds: 2000));
+      
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => const HowItWorksWidget(),
+        );
+
+        // Marcar que ya se mostró
+        await prefs.setBool('how_it_works_shown', true);
+      }
     }
   }
 
@@ -85,7 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
       _permisosShowcaseKey,
       _notificacionesShowcaseKey,
       _menuOpcionesShowcaseKey,
-      _trabajadoresShowcaseKey, // Add the new key
+      _panelWebShowcaseKey,
       _cerrarSesionShowcaseKey,
     ]);
   }
@@ -355,9 +379,12 @@ class _HomeScreenState extends State<HomeScreen> {
               showDialog(
                 context: context,
                 builder: (context) => const XiaomiNotificationGuide(),
-              ).then((_) {
+              ).then((_) async {
                 // Marcar que el diálogo ya se mostró
                 prefs.setBool('xiaomi_dialog_shown', true);
+                
+                // Mostrar "¿Cómo funciona?" después del diálogo Xiaomi
+                await _showHowItWorksIfNeeded();
               });
             }
           });
@@ -668,6 +695,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                           const XiaomiNotificationGuide(),
                                     );
                                     break;
+                                  case 'how_it_works':
+                                    showDialog(
+                                      context: context,
+                                      builder: (context) =>
+                                          const HowItWorksWidget(),
+                                    );
+                                    break;
                                 }
                               },
                               itemBuilder: (BuildContext context) => [
@@ -712,6 +746,17 @@ class _HomeScreenState extends State<HomeScreen> {
                                           color: Color(0xFF8A56FF)),
                                       SizedBox(width: 8),
                                       Text('Configuración Xiaomi/Redmi'),
+                                    ],
+                                  ),
+                                ),
+                                const PopupMenuItem(
+                                  value: 'how_it_works',
+                                  child: Row(
+                                    children: [
+                                      Icon(Icons.lightbulb_outline,
+                                          color: Color(0xFF8A56FF)),
+                                      SizedBox(width: 8),
+                                      Text('¿Cómo funciona?'),
                                     ],
                                   ),
                                 ),
@@ -886,12 +931,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
                           const SizedBox(height: 20),
 
-                          // Botón para navegar a TrabajadoresScreen
+                          // Botón para abrir Panel Web
                           Showcase(
-                            key: _trabajadoresShowcaseKey,
-                            title: 'Gestión de Trabajadores',
+                            key: _panelWebShowcaseKey,
+                            title: 'Panel de Administración Web',
                             description:
-                                'Aquí puedes ver la lista de trabajadores de tu negocio que usan BiPe Alerta.',
+                                'Accede a tu panel de administración completo desde la web para gestionar tu negocio y trabajadores.',
                             targetShapeBorder: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(20),
                             ),
@@ -930,7 +975,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                        builder: (context) => const TrabajadoresScreen()),
+                                        builder: (context) => const WebPanelScreen()),
                                   );
                                 },
                                 borderRadius: BorderRadius.circular(12),
@@ -950,7 +995,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   child: Row(
                                     children: [
                                       const Icon(
-                                        Icons.group,
+                                        Icons.language,
                                         color: Colors.white,
                                         size: 24,
                                       ),
@@ -960,7 +1005,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           crossAxisAlignment: CrossAxisAlignment.start,
                                           children: [
                                             const Text(
-                                              'Gestión de Trabajadores',
+                                              'Panel de Administración',
                                               style: TextStyle(
                                                 fontSize: 16,
                                                 fontWeight: FontWeight.bold,
@@ -969,7 +1014,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                             ),
                                             const SizedBox(height: 4),
                                             Text(
-                                              'Ver lista de trabajadores',
+                                              'Gestiona tus locales, trabajadores y obten tus reportes desde la web',
                                               style: TextStyle(
                                                 color: Colors.white.withOpacity(0.9),
                                                 fontSize: 14,
@@ -979,7 +1024,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                         ),
                                       ),
                                       const Icon(
-                                        Icons.arrow_forward_ios,
+                                        Icons.open_in_new,
                                         color: Colors.white,
                                         size: 16,
                                       ),
