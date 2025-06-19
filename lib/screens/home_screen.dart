@@ -156,7 +156,7 @@ class _HomeScreenState extends State<HomeScreen> {
       bool tutorialRunning = false;
       try {
         // Intentar detectar si el tutorial está visible de alguna manera
-        final showcase = ShowCaseWidget.of(context);
+        ShowCaseWidget.of(context);
         // Si llegamos aquí y no hay excepciones, verificamos las preferencias
         bool tutorialShown = prefs.getBool('tutorial_shown') ?? false;
         if (!tutorialShown) {
@@ -208,14 +208,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
   
   // Método para terminar manualmente el tutorial
-  void _finalizarTutorial() {
-    if (_tutorialActive) {
-      setState(() {
-        _tutorialActive = false;
-      });
-      _showHowItWorksIfNeeded();
-    }
-  }
 
   Future<void> _checkPermissions() async {
     final permissions = await _permissionService.checkAllPermissions();
