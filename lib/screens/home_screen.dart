@@ -45,6 +45,7 @@ class _HomeScreenState extends State<HomeScreen> {
   var nombrePlan = "";
   bool _isUpdating = false;
   bool _tutorialActive = false;
+  bool _isConnected = false;
 
   @override
   void initState() {
@@ -273,24 +274,109 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _startForegroundTask() async {
     if (!await FlutterForegroundTask.isRunningService) {
-      await FlutterForegroundTask.startService(
-        notificationTitle: 'BiPeAlerta',
-        notificationText: 'Monitoreando notificaciones',
-        callback: startCallback,
-      );
+      try {
+        await FlutterForegroundTask.startService(
+          notificationTitle: 'BiPeAlerta',
+          notificationText: 'Monitoreando notificaciones',
+          callback: startCallback,
+        );
+      } catch (e) {
+        print('Error iniciando servicio en primer plano: $e');
+        
+        // Si es el error de límite de tiempo de Android 15
+        if (e.toString().contains('Time limit already exhausted') || 
+            e.toString().contains('ForegroundServiceStartNotAllowedException')) {
+          setState(() {
+            _connectionMessage = 'Servicio limitado por Android 15. Abra la app para reiniciar.';
+          });
+          
+          // Mostrar diálogo informativo al usuario
+          _showAndroid15LimitDialog();
+        } else {
+          setState(() {
+            _connectionMessage = 'Error iniciando servicio: ${e.toString()}';
+          });
+        }
+      }
     }
   }
 
   Future<void> _stopForegroundTask() async {
+    print('Iniciando detención del servicio...');
+    
     try {
+      // Actualizar UI inmediatamente para mejor UX
+      if (mounted) {
+        setState(() {
+          _connectionMessage = 'Deteniendo servicio...';
+          _isConnected = false;
+        });
+      }
+      
+      // Intentar detener el servicio con timeout más corto
       await FlutterForegroundTask.stopService()
-          .timeout(const Duration(seconds: 5), onTimeout: () {
-        print('Timeout al detener el servicio');
-        throw TimeoutException('No se pudo detener el servicio');
+          .timeout(const Duration(seconds: 3), onTimeout: () {
+        print('Timeout al detener el servicio - forzando detención');
+        throw TimeoutException('Timeout al detener el servicio');
       });
+      
+      print('Servicio detenido exitosamente');
+      
+      // Actualizar UI final
+      if (mounted) {
+        setState(() {
+          _connectionMessage = 'Servicio detenido';
+        });
+      }
+      
+    } on TimeoutException catch (e) {
+      print('Timeout Exception: $e');
+      // Incluso con timeout, actualizar la UI
+      if (mounted) {
+        setState(() {
+          _connectionMessage = 'Servicio detenido (timeout)';
+        });
+      }
     } catch (e) {
       print('Error al detener el servicio: $e');
+      // Actualizar UI incluso con error
+      if (mounted) {
+        setState(() {
+          _connectionMessage = 'Error al detener servicio';
+        });
+      }
     }
+    
+    // Esperar un poco para asegurar que el servicio se haya detenido completamente
+    await Future.delayed(const Duration(milliseconds: 500));
+  }
+
+  void _showAndroid15LimitDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Limitación de Android 15'),
+          content: const Text(
+            'Android 15 limita los servicios en segundo plano a 6 horas cada 24 horas. '
+            'Para reactivar el monitoreo, mantenga la aplicación abierta por unos segundos '
+            'y luego puede cerrarla nuevamente.'
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Intentar reiniciar después de que el usuario cierre el diálogo
+                Future.delayed(const Duration(seconds: 2), () {
+                  _startForegroundTask();
+                });
+              },
+              child: const Text('Entendido'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _mostrarError(String mensaje) {
@@ -319,9 +405,32 @@ class _HomeScreenState extends State<HomeScreen> {
             notifications.removeLast();
           }
         });
+      } else if (receivedData.containsKey('type') &&
+          receivedData['type'] == 'service_timeout') {
+        // Manejar mensaje de timeout de Android 15
+        setState(() {
+          _connectionMessage = 'Servicio detenido por límite de Android 15';
+          _isConnected = false;
+        });
+        
+        // Mostrar diálogo informativo
+        Future.delayed(const Duration(milliseconds: 500), () {
+          _showAndroid15LimitDialog();
+        });
+      } else if (receivedData.containsKey('type') &&
+          receivedData['type'] == 'service_stopped') {
+        // Manejar mensaje de servicio detenido correctamente
+        setState(() {
+          _connectionMessage = 'Servicio detenido correctamente';
+          _isConnected = false;
+        });
+        print('Servicio confirmado como detenido');
       } else {
         setState(() {
           _connectionMessage = receivedData['message'] as String;
+          if (receivedData.containsKey('isConnected')) {
+            _isConnected = receivedData['isConnected'] ?? false;
+          }
         });
       }
     }

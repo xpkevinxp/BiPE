@@ -162,12 +162,44 @@ Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
 
   @override
   Future<void> onDestroy(DateTime timestamp) async {
-    print('onDestroy');
+    print('onDestroy iniciado');
+    
     try {
-      await _signalRService.detenerConexion();
-      await _notificationService.dispose();
+      // Usar timeout para evitar que el servicio tarde demasiado en detenerse
+      await Future.wait([
+        _signalRService.detenerConexion().timeout(
+          const Duration(seconds: 3),
+          onTimeout: () {
+            print('Timeout en detenerConexion - forzando cierre');
+            return; // Retornar void explícitamente
+          },
+        ),
+        _notificationService.dispose().timeout(
+          const Duration(seconds: 2),
+          onTimeout: () {
+            print('Timeout en dispose - forzando cierre');
+            return; // Retornar void explícitamente
+          },
+        ),
+      ]).timeout(
+        const Duration(seconds: 4), // Timeout total para todo el proceso
+        onTimeout: () {
+          print('Timeout total en onDestroy - forzando cierre inmediato');
+          return <void>[]; // Retornar lista vacía de void
+        },
+      );
+      
+      print('onDestroy completado exitosamente');
     } catch (e) {
       print('Error en onDestroy: $e');
+      // Asegurar que el servicio se detenga incluso con errores
+    }
+    
+    // Forzar limpieza final
+    try {
+      FlutterForegroundTask.sendDataToMain({'type': 'service_stopped'});
+    } catch (e) {
+      print('Error enviando mensaje de parada: $e');
     }
   }
 
@@ -227,12 +259,35 @@ Future<void> onReceiveData(Object data) async {
 }
 
 @override
-void onNotificationPressed() {
-  print('onNotificationPressed - Reintentando conexión');
-  
-  // Si la conexión está perdida, intentar reconectar
-  if (!_signalRService.isConnected) {
-    _signalRService.reintentarConexion();
+  void onNotificationPressed() {
+    print('onNotificationPressed - Reintentando conexión');
+    
+    // Si la conexión está perdida, intentar reconectar
+    if (!_signalRService.isConnected) {
+      _signalRService.reintentarConexion();
+    }
   }
-}
+
+  @override
+  void onTimeout() {
+    print('Servicio alcanzó el límite de tiempo de Android 15');
+    try {
+      // Limpiar recursos antes de detener el servicio
+      _signalRService.detenerConexion();
+      _notificationService.dispose();
+      
+      // Notificar a la aplicación principal
+      FlutterForegroundTask.sendDataToMain({
+        'type': 'service_timeout',
+        'message': 'El servicio se detuvo por límite de tiempo de Android 15'
+      });
+      
+      // Detener el servicio como requiere Android 15
+      FlutterForegroundTask.stopService();
+    } catch (e) {
+      print('Error en onTimeout: $e');
+      // Asegurar que el servicio se detenga incluso si hay errores
+      FlutterForegroundTask.stopService();
+    }
+  }
 }
