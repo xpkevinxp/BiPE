@@ -362,6 +362,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 : null,
           ),
         ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 15),
+          child: Text(
+            "Se le enviará un código por WhatsApp para validar su número. Por favor, ingrese un número de celular válido.",
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+            textAlign: TextAlign.center,
+          ),
+        ),
         Container(
           padding: const EdgeInsets.all(10),
           child: TextFormField(
