@@ -67,8 +67,9 @@ Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
     print('TaskHandler - inicializando NotificationService');
     final isGranted = await NotificationListenerService.isPermissionGranted();
     if (!isGranted) {
-      print('TaskHandler - solicitando permisos de notificación');
-      await NotificationListenerService.requestPermission();
+      print('TaskHandler - Permisos de notificación no concedidos. Los permisos deben solicitarse desde la UI principal.');
+      // NO solicitar permisos desde background service para evitar NullPointerException
+      // Los permisos deben solicitarse desde la Activity principal
     }
 
     await _notificationService.initialize();

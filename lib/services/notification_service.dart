@@ -36,8 +36,9 @@ class NotificationService {
       print("NotificationService - Permiso concedido: $isGranted");
 
       if (!isGranted) {
-        print("NotificationService - Solicitando permiso...");
-        await NotificationListenerService.requestPermission();
+        print("NotificationService - Permisos no concedidos. Deben solicitarse desde la UI principal.");
+        // NO solicitar permisos aquí para evitar NullPointerException cuando se ejecuta desde background
+        // Los permisos deben solicitarse desde la Activity principal
       }
 
       print("NotificationService - Configurando stream de notificaciones");
