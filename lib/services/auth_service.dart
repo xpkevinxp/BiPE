@@ -8,7 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/BipeModel.dart';
 
 class AuthService {
-  static const String baseUrl = 'https://apialert.c-centralizador.com/api';
+  static const String baseUrl = 'https://api.bipealerta.com/api';
   static const String tokenKey = 'jwt_token';
   static const String userIdKey = 'idUsuario';
   static const String businessIdKey = 'idNegocio';

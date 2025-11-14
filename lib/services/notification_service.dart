@@ -13,7 +13,7 @@ typedef NotificationCallback = void Function(String message);
 typedef ErrorCallback = void Function(String error);
 
 class NotificationService {
-  static const String baseUrl = 'https://apialert.c-centralizador.com/api';
+  static const String baseUrl = 'https://api.bipealerta.com/api';
   static const Duration requestTimeout = Duration(seconds: 30);
   final AuthService _authService = AuthService();
   NotificationCallback? onNotificationReceived;

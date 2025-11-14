@@ -10,7 +10,7 @@ class SignalRService {
   }
   
   SignalRService._internal();
-  static const String hubUrl = 'https://apialert.c-centralizador.com/dispositivohub';
+  static const String hubUrl = 'https://api.bipealerta.com/dispositivohub';
   static const int reconnectDelay = 5;
   static const int heartbeatInterval = 30;
 
