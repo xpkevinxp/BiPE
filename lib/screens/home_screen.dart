@@ -4,14 +4,13 @@ import 'package:bipealerta/services/permissions_widget.dart';
 import 'package:bipealerta/widgets/xiaomiguide_widget.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:in_app_update/in_app_update.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:showcaseview/showcaseview.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:async';
 import '../services/auth_service.dart';
-import '../services/background_service.dart';
+import '../services/notification_service.dart';
 import '../services/permission_service.dart';
 import '../widgets/how_it_works_widget.dart';
 import 'web_panel_screen.dart';
@@ -23,19 +22,20 @@ class HomeScreen extends StatefulWidget {
   _HomeScreenState createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   // Añadir GlobalKeys para cada elemento que queremos mostrar en el tutorial
   final GlobalKey _negocioShowcaseKey = GlobalKey();
   final GlobalKey _permisosShowcaseKey = GlobalKey();
   final GlobalKey _notificacionesShowcaseKey = GlobalKey();
   final GlobalKey _menuOpcionesShowcaseKey = GlobalKey();
-  final GlobalKey _panelWebShowcaseKey = GlobalKey(); // Key for web panel button
+  final GlobalKey _panelWebShowcaseKey = GlobalKey();
   final GlobalKey _cerrarSesionShowcaseKey = GlobalKey();
 
   final AuthService _authService = AuthService();
   final PermissionService _permissionService = PermissionService();
+  final NotificationService _notificationService = NotificationService();
   final List<String> notifications = [];
-  final ValueNotifier<Object?> _taskDataListenable = ValueNotifier(null);
+  
   bool _isLoggingOut = false;
   bool _isLoading = true;
   String? _connectionMessage;
@@ -45,12 +45,12 @@ class _HomeScreenState extends State<HomeScreen> {
   var nombrePlan = "";
   bool _isUpdating = false;
   bool _tutorialActive = false;
-  bool _isConnected = false;
+  bool _isServiceActive = false;
 
   @override
   void initState() {
     super.initState();
-    FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
+    WidgetsBinding.instance.addObserver(this);
     _checkPermissions();
     _initializeApp();
 
@@ -58,6 +58,49 @@ class _HomeScreenState extends State<HomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startTutorialIfNeeded();
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    // Cuando la app vuelve al primer plano, verificar permisos
+    if (state == AppLifecycleState.resumed) {
+      _checkPermissions();
+      _verifyServiceStatus();
+    }
+  }
+
+  Future<void> _verifyServiceStatus() async {
+    try {
+      final permissions = await _permissionService.checkAllPermissions();
+      final hasPermission = permissions['notificationListener'] ?? false;
+      
+      if (!hasPermission) {
+        if (mounted) {
+          setState(() {
+            _isServiceActive = false;
+            _connectionMessage = 'Servicio inactivo - Activa el permiso de notificaciones';
+          });
+        }
+        return;
+      }
+      
+      // Verificar estado real de conexión del listener (nuevo para Xiaomi)
+      final isConnected = _notificationService.isConnected;
+      
+      if (mounted) {
+        setState(() {
+          _isServiceActive = isConnected;
+          if (isConnected) {
+            _connectionMessage = 'Servicio activo - Monitoreando notificaciones';
+          } else {
+            _connectionMessage = 'Servicio desconectado - Intentando reconectar...';
+          }
+        });
+      }
+    } catch (e) {
+      print('Error verificando estado del servicio: $e');
+    }
   }
 
   Future<void> _startTutorialIfNeeded() async {
@@ -92,7 +135,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _checkTutorialCompletion() {
-    // Comprobar si el tutorial realmente ha terminado por completo, no solo un paso
     Timer.periodic(const Duration(milliseconds: 500), (timer) async {
       if (!mounted) {
         timer.cancel();
@@ -103,12 +145,9 @@ class _HomeScreenState extends State<HomeScreen> {
         final prefs = await SharedPreferences.getInstance();
         bool tutorialCompleted = prefs.getBool('tutorial_completed_now') ?? false;
         
-        // Solo considerar completado cuando la bandera está establecida (onFinish se ha disparado)
         if (tutorialCompleted) {
           timer.cancel();
           
-          // Asegurarse de que no se muestre inmediatamente después del último paso
-          // esperar un poco para que la UI del tutorial desaparezca completamente
           await Future.delayed(const Duration(seconds: 1));
           
           if (mounted && _tutorialActive) {
@@ -116,10 +155,8 @@ class _HomeScreenState extends State<HomeScreen> {
               _tutorialActive = false;
             });
             
-            // Limpiar la bandera
             await prefs.remove('tutorial_completed_now');
             
-            // Mostrar "¿Cómo funciona?" solo después de que todo el tutorial haya terminado
             await Future.delayed(const Duration(milliseconds: 500));
             _showHowItWorksIfNeeded();
           }
@@ -129,7 +166,6 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     });
     
-    // Timeout como último recurso (ahora más largo para dar tiempo al usuario)
     Timer(const Duration(seconds: 60), () {
       if (mounted && _tutorialActive) {
         print("Timeout del tutorial alcanzado");
@@ -142,7 +178,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _showHowItWorksIfNeeded() async {
-    // Verificar que no estemos en el tutorial
     if (_tutorialActive) {
       print("No se muestra 'Cómo funciona' porque el tutorial está activo");
       return;
@@ -151,14 +186,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final prefs = await SharedPreferences.getInstance();
     bool howItWorksShown = prefs.getBool('how_it_works_shown') ?? false;
     
-    // Verificar de nuevo todas las condiciones
     if (!howItWorksShown && mounted && !_tutorialActive) {
-      // Doble verificación para asegurarnos que el tutorial no está activo
       bool tutorialRunning = false;
       try {
-        // Intentar detectar si el tutorial está visible de alguna manera
         ShowCaseWidget.of(context);
-        // Si llegamos aquí y no hay excepciones, verificamos las preferencias
         bool tutorialShown = prefs.getBool('tutorial_shown') ?? false;
         if (!tutorialShown) {
           tutorialRunning = true;
@@ -172,25 +203,21 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
       
-      // Esperar un poco más para asegurarnos que no hay conflicto con la UI
       await Future.delayed(const Duration(milliseconds: 1500));
       
-      // Verificar por última vez antes de mostrar
       if (mounted && !_tutorialActive) {
         print("Mostrando widget 'Cómo funciona'");
         showDialog(
           context: context,
-          barrierDismissible: true,  // Permitir cerrar tocando fuera
+          barrierDismissible: true,
           builder: (context) => const HowItWorksWidget(),
         );
 
-        // Marcar que ya se mostró
         await prefs.setBool('how_it_works_shown', true);
       }
     }
   }
 
-  // Implementar un método para iniciar el tutorial manualmente
   void _reiniciarTutorial() {
     setState(() {
       _tutorialActive = true;
@@ -207,14 +234,13 @@ class _HomeScreenState extends State<HomeScreen> {
     
     _checkTutorialCompletion();
   }
-  
-  // Método para terminar manualmente el tutorial
 
   Future<void> _checkPermissions() async {
     final permissions = await _permissionService.checkAllPermissions();
     if (mounted) {
       setState(() {
         _permissions = permissions;
+        _isServiceActive = permissions['notificationListener'] ?? false;
       });
     }
   }
@@ -236,6 +262,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (granted && mounted) {
       await _checkPermissions();
+      // Reiniciar el servicio de notificaciones cuando se otorgan permisos
+      if (permission == 'notificationListener') {
+        await _initializeNotificationService();
+      }
     }
   }
 
@@ -243,7 +273,6 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final info = await InAppUpdate.checkForUpdate();
       if (info.updateAvailability == UpdateAvailability.updateAvailable) {
-        await _stopForegroundTask();
         final result = await InAppUpdate.performImmediateUpdate();
 
         if (result == AppUpdateResult.inAppUpdateFailed) {
@@ -272,111 +301,69 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> _startForegroundTask() async {
-    if (!await FlutterForegroundTask.isRunningService) {
-      try {
-        await FlutterForegroundTask.startService(
-          notificationTitle: 'BiPeAlerta',
-          notificationText: 'Monitoreando notificaciones',
-          callback: startCallback,
-        );
-      } catch (e) {
-        print('Error iniciando servicio en primer plano: $e');
-        
-        // Si es el error de límite de tiempo de Android 15
-        if (e.toString().contains('Time limit already exhausted') || 
-            e.toString().contains('ForegroundServiceStartNotAllowedException')) {
+  Future<void> _initializeNotificationService() async {
+    try {
+      setState(() {
+        _connectionMessage = 'Iniciando servicio...';
+      });
+
+      // Configurar callbacks
+      _notificationService.onNotificationReceived = (message) {
+        print('Notificación recibida: $message');
+        if (mounted) {
           setState(() {
-            _connectionMessage = 'Servicio limitado por Android 15. Abra la app para reiniciar.';
-          });
-          
-          // Mostrar diálogo informativo al usuario
-          _showAndroid15LimitDialog();
-        } else {
-          setState(() {
-            _connectionMessage = 'Error iniciando servicio: ${e.toString()}';
+            notifications.insert(0, '${DateTime.now()}: $message');
+            if (notifications.length > 10) {
+              notifications.removeLast();
+            }
           });
         }
-      }
-    }
-  }
+      };
 
-  Future<void> _stopForegroundTask() async {
-    print('Iniciando detención del servicio...');
-    
-    try {
-      // Actualizar UI inmediatamente para mejor UX
+      _notificationService.onError = (error) {
+        print('Error en NotificationService: $error');
+        if (mounted) {
+          setState(() {
+            _connectionMessage = error;
+          });
+        }
+      };
+
+      // Nuevo callback para estado de conexión (Xiaomi fix)
+      _notificationService.onConnectionStatusChanged = (isConnected) {
+        print('Estado de conexión cambió: $isConnected');
+        if (mounted) {
+          setState(() {
+            _isServiceActive = isConnected;
+            if (isConnected) {
+              _connectionMessage = 'Servicio activo - Monitoreando notificaciones';
+            } else {
+              _connectionMessage = 'Servicio desconectado - Reconectando automáticamente...';
+            }
+          });
+        }
+      };
+
+      await _notificationService.initialize();
+      await _notificationService.debugBipesStatus();
+
       if (mounted) {
         setState(() {
-          _connectionMessage = 'Deteniendo servicio...';
-          _isConnected = false;
-        });
-      }
-      
-      // Intentar detener el servicio con timeout más corto
-      await FlutterForegroundTask.stopService()
-          .timeout(const Duration(seconds: 3), onTimeout: () {
-        print('Timeout al detener el servicio - forzando detención');
-        throw TimeoutException('Timeout al detener el servicio');
-      });
-      
-      print('Servicio detenido exitosamente');
-      
-      // Actualizar UI final
-      if (mounted) {
-        setState(() {
-          _connectionMessage = 'Servicio detenido';
-        });
-      }
-      
-    } on TimeoutException catch (e) {
-      print('Timeout Exception: $e');
-      // Incluso con timeout, actualizar la UI
-      if (mounted) {
-        setState(() {
-          _connectionMessage = 'Servicio detenido (timeout)';
+          _isServiceActive = _notificationService.isConnected;
+          _connectionMessage = _isServiceActive 
+              ? 'Servicio activo - Monitoreando notificaciones'
+              : 'Servicio iniciado - Esperando conexión...';
         });
       }
     } catch (e) {
-      print('Error al detener el servicio: $e');
-      // Actualizar UI incluso con error
+      print('Error iniciando servicio de notificaciones: $e');
       if (mounted) {
         setState(() {
-          _connectionMessage = 'Error al detener servicio';
+          _isServiceActive = false;
+          _connectionMessage = 'Error iniciando servicio: ${e.toString()}';
         });
       }
     }
-    
-    // Esperar un poco para asegurar que el servicio se haya detenido completamente
-    await Future.delayed(const Duration(milliseconds: 500));
-  }
-
-  void _showAndroid15LimitDialog() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Limitación de Android 15'),
-          content: const Text(
-            'Android 15 limita los servicios en segundo plano a 6 horas cada 24 horas. '
-            'Para reactivar el monitoreo, mantenga la aplicación abierta por unos segundos '
-            'y luego puede cerrarla nuevamente.'
-          ),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.of(context).pop();
-                // Intentar reiniciar después de que el usuario cierre el diálogo
-                Future.delayed(const Duration(seconds: 2), () {
-                  _startForegroundTask();
-                });
-              },
-              child: const Text('Entendido'),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   void _mostrarError(String mensaje) {
@@ -388,51 +375,6 @@ class _HomeScreenState extends State<HomeScreen> {
           duration: const Duration(seconds: 3),
         ),
       );
-    }
-  }
-
-  void _onReceiveTaskData(Object? data) {
-    print('HomeScreen - Datos recibidos: $data');
-    if (data != null && mounted) {
-      final Map<String, dynamic> receivedData = data as Map<String, dynamic>;
-
-      if (receivedData.containsKey('type') &&
-          receivedData['type'] == 'notification') {
-        setState(() {
-          notifications.insert(
-              0, '${DateTime.now()}: ${receivedData['message']}');
-          if (notifications.length > 10) {
-            notifications.removeLast();
-          }
-        });
-      } else if (receivedData.containsKey('type') &&
-          receivedData['type'] == 'service_timeout') {
-        // Manejar mensaje de timeout de Android 15
-        setState(() {
-          _connectionMessage = 'Servicio detenido por límite de Android 15';
-          _isConnected = false;
-        });
-        
-        // Mostrar diálogo informativo
-        Future.delayed(const Duration(milliseconds: 500), () {
-          _showAndroid15LimitDialog();
-        });
-      } else if (receivedData.containsKey('type') &&
-          receivedData['type'] == 'service_stopped') {
-        // Manejar mensaje de servicio detenido correctamente
-        setState(() {
-          _connectionMessage = 'Servicio detenido correctamente';
-          _isConnected = false;
-        });
-        print('Servicio confirmado como detenido');
-      } else {
-        setState(() {
-          _connectionMessage = receivedData['message'] as String;
-          if (receivedData.containsKey('isConnected')) {
-            _isConnected = receivedData['isConnected'] ?? false;
-          }
-        });
-      }
     }
   }
 
@@ -450,13 +392,8 @@ class _HomeScreenState extends State<HomeScreen> {
         throw Exception('Datos de usuario no encontrados');
       }
 
-      if (await FlutterForegroundTask.isRunningService) {
-        print('Servicio ya en ejecución, esperando estado...');
-        FlutterForegroundTask.sendDataToTask('getStatus');
-      } else {
-        setState(() {
-          _connectionMessage = 'Iniciando...';
-        });
+      if (mounted) {
+        setState(() {});
       }
     } catch (e) {
       print('Error cargando datos: $e');
@@ -465,7 +402,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _handleUpdateBipes() async {
-    // Verificar si hay conectividad antes de intentar reconectar
     final connectivityResult = await Connectivity().checkConnectivity();
 
     if (connectivityResult == ConnectivityResult.none) {
@@ -473,7 +409,6 @@ class _HomeScreenState extends State<HomeScreen> {
         _connectionMessage = 'Sin conexión a internet';
       });
 
-      // Mostrar un mensaje al usuario
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
@@ -494,8 +429,10 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       await _authService.migrateAndUpdateBipes();
 
-      // Notificar al servicio en segundo plano
-      FlutterForegroundTask.sendDataToTask({'action': 'updateBipes'});
+      // Reiniciar el servicio de notificaciones con los nuevos bipes
+      await _notificationService.dispose();
+      await _notificationService.initialize();
+      await _notificationService.debugBipesStatus();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -513,7 +450,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         setState(() {
           _isUpdating = false;
-          _connectionMessage = 'Monitoreando notificaciones';
+          _connectionMessage = 'Servicio activo - Monitoreando notificaciones';
         });
       }
     }
@@ -524,13 +461,18 @@ class _HomeScreenState extends State<HomeScreen> {
       // Primero verificar actualizaciones de la app
       await checkForUpdate();
 
+      // Verificar y actualizar bipes si es necesario
       final bipes = await _authService.getBipes();
       if (bipes.any((bipe) => bipe.packageName == '')) {
         await _handleUpdateBipes();
       }
 
-      await _startForegroundTask();
+      // Cargar datos del usuario
       await _loadUserData();
+
+      // Inicializar el servicio de notificaciones
+      await _initializeNotificationService();
+
     } catch (e) {
       print('Error en inicialización: $e');
       _mostrarError('Error al iniciar la aplicación');
@@ -547,8 +489,10 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() => _isLoggingOut = true);
     try {
       print('Iniciando proceso de logout...');
-      await _stopForegroundTask();
-      print('Servicio detenido');
+      
+      // Detener el servicio de notificaciones
+      await _notificationService.dispose();
+      print('Servicio de notificaciones detenido');
 
       await _authService.logout();
       print('Logout completado');
@@ -573,27 +517,20 @@ class _HomeScreenState extends State<HomeScreen> {
       bool isXiaomi = await DeviceHelper.isXiaomiDevice();
 
       if (isXiaomi && mounted) {
-        // Esperar a que la pantalla esté completamente cargada
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          // Verificar si el diálogo ya se ha mostrado antes
           SharedPreferences.getInstance().then((prefs) {
             bool? dialogShown = prefs.getBool('xiaomi_dialog_shown');
 
             if (dialogShown != true) {
-              // Verificar primero si el tutorial está activo para evitar conflictos
               if (_tutorialActive) {
-                // Si el tutorial está activo, solo marcar que se mostró para la próxima vez
                 prefs.setBool('xiaomi_dialog_shown', true);
               } else {
                 showDialog(
                   context: context,
                   builder: (context) => const XiaomiNotificationGuide(),
                 ).then((_) async {
-                  // Marcar que el diálogo ya se mostró
                   prefs.setBool('xiaomi_dialog_shown', true);
                   
-                  // Mostrar "¿Cómo funciona?" después del diálogo Xiaomi solo si no hay tutorial activo
-                  // Esperar un poco más para evitar problemas
                   await Future.delayed(const Duration(seconds: 1));
                   if (!_tutorialActive && mounted) {
                     await _showHowItWorksIfNeeded();
@@ -609,10 +546,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // En el método _handleRetryConnection de HomeScreen
-  Future<void> _handleRetryConnection() async {
+  Future<void> _handleRestartService() async {
     try {
-      // Verificar si hay conectividad antes de intentar reconectar
       final connectivityResult = await Connectivity().checkConnectivity();
 
       if (connectivityResult == ConnectivityResult.none) {
@@ -620,7 +555,6 @@ class _HomeScreenState extends State<HomeScreen> {
           _connectionMessage = 'Sin conexión a internet';
         });
 
-        // Mostrar un mensaje al usuario
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
@@ -633,19 +567,160 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       setState(() {
-        _connectionMessage = 'Intentando reconectar...';
+        _connectionMessage = 'Reconectando servicio...';
       });
 
-      // Enviar comando para reiniciar la conexión al servicio
-      FlutterForegroundTask.sendDataToTask({'action': 'retryConnection'});
+      // Primero intentar reconexión rápida (nuevo método para Xiaomi)
+      final reconnected = await _notificationService.forceReconnect();
+      
+      if (reconnected) {
+        if (mounted) {
+          setState(() {
+            _isServiceActive = true;
+            _connectionMessage = 'Servicio reconectado exitosamente';
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('✅ Servicio reconectado correctamente'),
+              backgroundColor: Color(0xFF8A56FF),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        }
+      } else {
+        // Si la reconexión rápida falla, hacer reinicio completo
+        print('Reconexión rápida falló, haciendo reinicio completo...');
+        
+        setState(() {
+          _connectionMessage = 'Reiniciando servicio completamente...';
+        });
+        
+        await _notificationService.dispose();
+        await Future.delayed(const Duration(seconds: 1));
+        await _initializeNotificationService();
+      }
 
-      // Breve pausa para permitir que el servicio inicie la reconexión
-      await Future.delayed(const Duration(seconds: 2));
     } catch (e) {
-      print('Error al reintentar conexión: $e');
-      setState(() {
-        _connectionMessage = 'Error al reintentar: $e';
-      });
+      print('Error al reiniciar servicio: $e');
+      if (mounted) {
+        setState(() {
+          _connectionMessage = 'Error al reiniciar: $e';
+        });
+      }
+    }
+  }
+
+  Future<void> _showDebugStatus() async {
+    try {
+      final status = await _notificationService.getDetailedStatus();
+      
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.bug_report, color: Color(0xFF8A56FF)),
+                SizedBox(width: 10),
+                Text('Estado del Servicio'),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildStatusRow('Conectado', 
+                      status['isConnected'] == true ? '✅ Sí' : '❌ No'),
+                  _buildStatusRow('Watchdog Activo', 
+                      status['watchdogActive'] == true ? '✅ Activo (${status['watchdogInterval'] ?? '5 min'})' : '⚠️ Inactivo'),
+                  _buildStatusRow('Reconexión Agresiva', 
+                      status['aggressiveReconnectActive'] == true ? '⚡ Activa (${status['aggressiveInterval'] ?? '15 seg'})' : '⏸️ Inactiva'),
+                  _buildStatusRow('Intentos de Reconexión', 
+                      '${status['reconnectAttempts'] ?? 0}/${status['maxReconnectAttempts'] ?? 10}'),
+                  if (status['lastNotificationTime'] != null)
+                    _buildStatusRow('Última Notificación', 
+                        _formatDateTime(status['lastNotificationTime'])),
+                  if (status['lastConnectedTime'] != null)
+                    _buildStatusRow('Última Conexión', 
+                        _formatDateTime(status['lastConnectedTime'])),
+                  if (status['lastDisconnectedTime'] != null)
+                    _buildStatusRow('Última Desconexión', 
+                        _formatDateTime(status['lastDisconnectedTime'])),
+                  if (status['error'] != null)
+                    _buildStatusRow('Error', status['error']),
+                  const SizedBox(height: 16),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '• El Watchdog verifica cada 5 minutos si el servicio está funcionando.\n'
+                      '• Al detectar desconexión, se activa la Reconexión Agresiva que intenta cada 15 segundos.\n'
+                      '• Después de 10 intentos fallidos, usa el botón "Forzar Reconexión".',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Cerrar'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(context).pop();
+                  _handleRestartService();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF8A56FF),
+                ),
+                child: const Text('Forzar Reconexión', 
+                    style: TextStyle(color: Colors.white)),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error mostrando estado de debug: $e');
+    }
+  }
+
+  Widget _buildStatusRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: TextStyle(color: Colors.grey.shade700)),
+          Text(value, style: const TextStyle(fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
+  }
+
+  String _formatDateTime(String? isoString) {
+    if (isoString == null) return 'N/A';
+    try {
+      final dt = DateTime.parse(isoString);
+      final now = DateTime.now();
+      final diff = now.difference(dt);
+      
+      if (diff.inMinutes < 1) return 'Hace segundos';
+      if (diff.inMinutes < 60) return 'Hace ${diff.inMinutes} min';
+      if (diff.inHours < 24) return 'Hace ${diff.inHours} horas';
+      return '${dt.day}/${dt.month} ${dt.hour}:${dt.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return isoString;
     }
   }
 
@@ -710,90 +785,74 @@ class _HomeScreenState extends State<HomeScreen> {
   // Métodos para manejar la apariencia según el estado de conexión
   Color _getStatusBackgroundColor(String message) {
     message = message.toLowerCase();
-    if (message.contains('conectado')) {
-      return const Color(0xFFF0EBFF); // Púrpura muy claro
-    } else if (message.contains('intentando reconectar') ||
-        message.contains('sin conexión')) {
+    if (message.contains('activo') || message.contains('monitoreando')) {
+      return const Color(0xFFF0EBFF);
+    } else if (message.contains('iniciando') || message.contains('reiniciando')) {
       return Colors.orange.shade50;
-    } else if (message.contains('error') ||
-        message.contains('perdida') ||
-        message.contains('desconectado')) {
+    } else if (message.contains('error') || message.contains('inactivo')) {
       return Colors.red.shade50;
     } else {
-      return const Color(0xFFEEE6FF); // Púrpura claro informativo
+      return const Color(0xFFEEE6FF);
     }
   }
 
   Color _getStatusBorderColor(String message) {
     message = message.toLowerCase();
-    if (message.contains('conectado')) {
-      return const Color(0xFFD4BFFF); // Púrpura claro
-    } else if (message.contains('intentando reconectar') ||
-        message.contains('sin conexión')) {
+    if (message.contains('activo') || message.contains('monitoreando')) {
+      return const Color(0xFFD4BFFF);
+    } else if (message.contains('iniciando') || message.contains('reiniciando')) {
       return Colors.orange.shade200;
-    } else if (message.contains('error') ||
-        message.contains('perdida') ||
-        message.contains('desconectado')) {
+    } else if (message.contains('error') || message.contains('inactivo')) {
       return Colors.red.shade200;
     } else {
-      return const Color(0xFFCCB3FF); // Púrpura medio
+      return const Color(0xFFCCB3FF);
     }
   }
 
   Color _getStatusIconColor(String message) {
     message = message.toLowerCase();
-    if (message.contains('conectado')) {
-      return const Color(0xFF8A56FF); // Púrpura del logo
-    } else if (message.contains('intentando reconectar') ||
-        message.contains('sin conexión')) {
+    if (message.contains('activo') || message.contains('monitoreando')) {
+      return const Color(0xFF8A56FF);
+    } else if (message.contains('iniciando') || message.contains('reiniciando')) {
       return Colors.orange.shade500;
-    } else if (message.contains('error') ||
-        message.contains('perdida') ||
-        message.contains('desconectado')) {
+    } else if (message.contains('error') || message.contains('inactivo')) {
       return Colors.red.shade500;
     } else {
-      return const Color(0xFF9E73FF); // Púrpura medio
+      return const Color(0xFF9E73FF);
     }
   }
 
   Color _getStatusTextColor(String message) {
     message = message.toLowerCase();
-    if (message.contains('conectado')) {
-      return const Color(0xFF6433E0); // Púrpura oscuro
-    } else if (message.contains('intentando reconectar') ||
-        message.contains('sin conexión')) {
+    if (message.contains('activo') || message.contains('monitoreando')) {
+      return const Color(0xFF6433E0);
+    } else if (message.contains('iniciando') || message.contains('reiniciando')) {
       return Colors.orange.shade800;
-    } else if (message.contains('error') ||
-        message.contains('perdida') ||
-        message.contains('desconectado')) {
+    } else if (message.contains('error') || message.contains('inactivo')) {
       return Colors.red.shade800;
     } else {
-      return const Color(0xFF7847E0); // Púrpura medio oscuro
+      return const Color(0xFF7847E0);
     }
   }
 
   Color _getRetryButtonColor(String message) {
     message = message.toLowerCase();
-    if (message.contains('error') ||
-        message.contains('perdida') ||
-        message.contains('desconectado')) {
+    if (message.contains('error') || message.contains('inactivo')) {
       return Colors.red.shade500;
     } else {
-      return Colors.orange.shade500; // Para estados de advertencia
+      return Colors.orange.shade500;
     }
   }
 
   IconData _getStatusIcon(String message) {
     message = message.toLowerCase();
-    if (message.contains('conectado')) {
+    if (message.contains('activo') || message.contains('monitoreando')) {
       return Icons.check_circle;
-    } else if (message.contains('intentando reconectar')) {
+    } else if (message.contains('iniciando') || message.contains('reiniciando')) {
       return Icons.sync;
     } else if (message.contains('sin conexión')) {
       return Icons.signal_wifi_off;
-    } else if (message.contains('error') ||
-        message.contains('perdida') ||
-        message.contains('desconectado')) {
+    } else if (message.contains('error') || message.contains('inactivo')) {
       return Icons.error_outline;
     } else {
       return Icons.info_outline;
@@ -802,10 +861,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
   bool _shouldShowRetryButton(String message) {
     message = message.toLowerCase();
-    return message.contains('desconectado') ||
-        message.contains('perdida') ||
+    return message.contains('inactivo') ||
         message.contains('error') ||
-        message.contains('sin conexión');
+        message.contains('sin conexión') ||
+        message.contains('desconectado');
   }
 
   @override
@@ -818,646 +877,670 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    return WithForegroundTask(
-      child: WillPopScope(
-        onWillPop: () async => false,
-        child: Scaffold(
-          body: Container(
-            width: double.infinity,
-            decoration: const BoxDecoration(
-                gradient: LinearGradient(begin: Alignment.topCenter, colors: [
-              Color(0xFF8A56FF), // Color principal del logo
-              Color(0xFF9E73FF), // Un poco más claro
-              Color(0xFFAB85FF), // Aún más claro
-            ])),
-            child: Column(
-              children: [
-                const SizedBox(height: 60),
-                // Header con título y menú
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          FadeInUp(
-                              duration: const Duration(milliseconds: 1000),
-                              child: const Text(
-                                "BiPe Alerta",
-                                style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 32,
-                                    fontWeight: FontWeight.bold),
-                              )),
-                          const SizedBox(height: 10),
-                          FadeInUp(
-                              duration: const Duration(milliseconds: 1300),
-                              child: const Text(
-                                "Panel de Control",
-                                style: TextStyle(
-                                    color: Colors.white, fontSize: 18),
-                              )),
-                        ],
-                      ),
-                      Row(
-                        children: [
-                          Showcase(
-                            key: _menuOpcionesShowcaseKey,
-                            title: 'Opciones del menú',
-                            description:
-                                'Aquí encontrarás opciones como actualizar bipes, contactar soporte o mejorar tu plan.',
-                            targetShapeBorder: const CircleBorder(),
-                            tooltipActionConfig: const TooltipActionConfig(
-                              position: TooltipActionPosition.inside,
-                              alignment: MainAxisAlignment.spaceBetween,
+    return WillPopScope(
+      onWillPop: () async => false,
+      child: Scaffold(
+        body: Container(
+          width: double.infinity,
+          decoration: const BoxDecoration(
+              gradient: LinearGradient(begin: Alignment.topCenter, colors: [
+            Color(0xFF8A56FF),
+            Color(0xFF9E73FF),
+            Color(0xFFAB85FF),
+          ])),
+          child: Column(
+            children: [
+              const SizedBox(height: 60),
+              // Header con título y menú
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        FadeInUp(
+                            duration: const Duration(milliseconds: 1000),
+                            child: const Text(
+                              "BiPe Alerta",
+                              style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 32,
+                                  fontWeight: FontWeight.bold),
+                            )),
+                        const SizedBox(height: 10),
+                        FadeInUp(
+                            duration: const Duration(milliseconds: 1300),
+                            child: const Text(
+                              "Panel de Control",
+                              style: TextStyle(
+                                  color: Colors.white, fontSize: 18),
+                            )),
+                      ],
+                    ),
+                    Row(
+                      children: [
+                        Showcase(
+                          key: _menuOpcionesShowcaseKey,
+                          title: 'Opciones del menú',
+                          description:
+                              'Aquí encontrarás opciones como actualizar bipes, contactar soporte o mejorar tu plan.',
+                          targetShapeBorder: const CircleBorder(),
+                          tooltipActionConfig: const TooltipActionConfig(
+                            position: TooltipActionPosition.inside,
+                            alignment: MainAxisAlignment.spaceBetween,
+                          ),
+                          tooltipActions: const [
+                            TooltipActionButton(
+                              type: TooltipDefaultActionType.previous,
+                              name: "Atras",
+                              textStyle: TextStyle(color: Colors.white),
                             ),
-                            tooltipActions: const [
-                              TooltipActionButton(
-                                type: TooltipDefaultActionType.previous,
-                                name: "Atras",
-                                textStyle: TextStyle(color: Colors.white),
+                            TooltipActionButton(
+                              type: TooltipDefaultActionType.next,
+                              name: "Siguiente",
+                              textStyle: TextStyle(color: Colors.white),
+                            ),
+                          ],
+                          child: PopupMenuButton<String>(
+                            icon: const Icon(Icons.more_vert,
+                                color: Colors.white),
+                            onSelected: (value) {
+                              switch (value) {
+                                case 'support':
+                                  _abrirWhatsAppSoporte();
+                                  break;
+                                case 'upgrade':
+                                  _abrirWhatsAppUpgrade();
+                                  break;
+                                case 'update':
+                                  _handleUpdateBipes();
+                                  break;
+                                case 'tutorial':
+                                  _reiniciarTutorial();
+                                  break;
+                                case 'xiaomi_guide':
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) =>
+                                        const XiaomiNotificationGuide(),
+                                  );
+                                  break;
+                                case 'how_it_works':
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) =>
+                                        const HowItWorksWidget(),
+                                  );
+                                  break;
+                                case 'debug_status':
+                                  _showDebugStatus();
+                                  break;
+                              }
+                            },
+                            itemBuilder: (BuildContext context) => [
+                              const PopupMenuItem(
+                                value: 'update',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.sync,
+                                        color: Color(0xFF8A56FF)),
+                                    SizedBox(width: 8),
+                                    Text('Actualizar Bipes'),
+                                  ],
+                                ),
                               ),
-                              TooltipActionButton(
-                                type: TooltipDefaultActionType.next,
-                                name: "Siguiente",
-                                textStyle: TextStyle(color: Colors.white),
+                              const PopupMenuItem(
+                                value: 'support',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.support_agent,
+                                        color: Color(0xFF8A56FF)),
+                                    SizedBox(width: 8),
+                                    Text('Soporte'),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'upgrade',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.upgrade,
+                                        color: Color(0xFF8A56FF)),
+                                    SizedBox(width: 8),
+                                    Text('Mejorar Plan'),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'xiaomi_guide',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.phone_android,
+                                        color: Color(0xFF8A56FF)),
+                                    SizedBox(width: 8),
+                                    Text('Configuración Xiaomi/Redmi'),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'how_it_works',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.lightbulb_outline,
+                                        color: Color(0xFF8A56FF)),
+                                    SizedBox(width: 8),
+                                    Text('¿Cómo funciona?'),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'tutorial',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.help_outline,
+                                        color: Color(0xFF8A56FF)),
+                                    SizedBox(width: 8),
+                                    Text('Ver Tutorial'),
+                                  ],
+                                ),
+                              ),
+                              const PopupMenuItem(
+                                value: 'debug_status',
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.bug_report,
+                                        color: Color(0xFF8A56FF)),
+                                    SizedBox(width: 8),
+                                    Text('Estado del Servicio'),
+                                  ],
+                                ),
                               ),
                             ],
-                            child: PopupMenuButton<String>(
-                              icon: const Icon(Icons.more_vert,
-                                  color: Colors.white),
-                              onSelected: (value) {
-                                switch (value) {
-                                  case 'support':
-                                    _abrirWhatsAppSoporte();
-                                    break;
-                                  case 'upgrade':
-                                    _abrirWhatsAppUpgrade();
-                                    break;
-                                  case 'update':
-                                    _handleUpdateBipes();
-                                    break;
-                                  case 'tutorial':
-                                    _reiniciarTutorial();
-                                    break;
-                                  case 'xiaomi_guide':
-                                    showDialog(
-                                      context: context,
-                                      builder: (context) =>
-                                          const XiaomiNotificationGuide(),
-                                    );
-                                    break;
-                                  case 'how_it_works':
-                                    showDialog(
-                                      context: context,
-                                      builder: (context) =>
-                                          const HowItWorksWidget(),
-                                    );
-                                    break;
-                                }
-                              },
-                              itemBuilder: (BuildContext context) => [
-                                const PopupMenuItem(
-                                  value: 'update',
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.sync,
-                                          color: Color(0xFF8A56FF)),
-                                      SizedBox(width: 8),
-                                      Text('Actualizar Bipes'),
-                                    ],
-                                  ),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'support',
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.support_agent,
-                                          color: Color(0xFF8A56FF)),
-                                      SizedBox(width: 8),
-                                      Text('Soporte'),
-                                    ],
-                                  ),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'upgrade',
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.upgrade,
-                                          color: Color(0xFF8A56FF)),
-                                      SizedBox(width: 8),
-                                      Text('Mejorar Plan'),
-                                    ],
-                                  ),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'xiaomi_guide',
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.phone_android,
-                                          color: Color(0xFF8A56FF)),
-                                      SizedBox(width: 8),
-                                      Text('Configuración Xiaomi/Redmi'),
-                                    ],
-                                  ),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'how_it_works',
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.lightbulb_outline,
-                                          color: Color(0xFF8A56FF)),
-                                      SizedBox(width: 8),
-                                      Text('¿Cómo funciona?'),
-                                    ],
-                                  ),
-                                ),
-                                const PopupMenuItem(
-                                  value: 'tutorial',
-                                  child: Row(
-                                    children: [
-                                      Icon(Icons.help_outline,
-                                          color: Color(0xFF8A56FF)),
-                                      SizedBox(width: 8),
-                                      Text('Ver Tutorial'),
-                                    ],
-                                  ),
+                          ),
+                        ),
+                        Showcase(
+                          key: _cerrarSesionShowcaseKey,
+                          title: 'Cerrar sesión',
+                          description:
+                              'Presiona aquí para cerrar sesión y salir de la aplicación.',
+                          targetShapeBorder: const CircleBorder(),
+                          tooltipActionConfig: const TooltipActionConfig(
+                            position: TooltipActionPosition.inside,
+                            alignment: MainAxisAlignment.spaceBetween,
+                          ),
+                          tooltipActions: const [
+                            TooltipActionButton(
+                              type: TooltipDefaultActionType.previous,
+                              name: "Atras",
+                              textStyle: TextStyle(color: Colors.white),
+                            ),
+                            TooltipActionButton(
+                              type: TooltipDefaultActionType.skip,
+                              name: "Saltar",
+                              textStyle: TextStyle(color: Colors.white),
+                            ),
+                          ],
+                          child: IconButton(
+                            icon: _isLoggingOut
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      valueColor:
+                                          AlwaysStoppedAnimation<Color>(
+                                              Colors.white),
+                                    ),
+                                  )
+                                : const Icon(Icons.logout,
+                                    color: Colors.white),
+                            onPressed: _isLoggingOut ? null : _handleLogout,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+
+              // Contenido principal con efecto curvo
+              Expanded(
+                child: Container(
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(60),
+                        topRight: Radius.circular(60)),
+                  ),
+                  child: SingleChildScrollView(
+                    child: Column(
+                      children: [
+                        const SizedBox(height: 30),
+
+                        // Tarjeta de información
+                        Showcase(
+                          key: _negocioShowcaseKey,
+                          title: 'Información de Negocio',
+                          description:
+                              'Aquí verás la información de tu negocio, tu nombre y el plan que tienes contratado.',
+                          targetShapeBorder: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          tooltipActionConfig: const TooltipActionConfig(
+                            position: TooltipActionPosition.inside,
+                            alignment: MainAxisAlignment.spaceBetween,
+                          ),
+                          tooltipActions: const [
+                            TooltipActionButton(
+                              type: TooltipDefaultActionType.skip,
+                              name: "Saltar",
+                              textStyle: TextStyle(color: Colors.white),
+                            ),
+                            TooltipActionButton(
+                              type: TooltipDefaultActionType.next,
+                              name: "Siguiente",
+                              textStyle: TextStyle(color: Colors.white),
+                            ),
+                          ],
+                          child: Container(
+                            margin:
+                                const EdgeInsets.symmetric(horizontal: 20),
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0xFFEEE6FF),
+                                  blurRadius: 10,
+                                  spreadRadius: 1,
                                 ),
                               ],
                             ),
-                          ),
-                          Showcase(
-                            key: _cerrarSesionShowcaseKey,
-                            title: 'Cerrar sesión',
-                            description:
-                                'Presiona aquí para cerrar sesión y salir de la aplicación.',
-                            targetShapeBorder: const CircleBorder(),
-                            tooltipActionConfig: const TooltipActionConfig(
-                              position: TooltipActionPosition.inside,
-                              alignment: MainAxisAlignment.spaceBetween,
-                            ),
-                            tooltipActions: const [
-                              TooltipActionButton(
-                                type: TooltipDefaultActionType.previous,
-                                name: "Atras",
-                                textStyle: TextStyle(color: Colors.white),
-                              ),
-                              TooltipActionButton(
-                                type: TooltipDefaultActionType.skip,
-                                name: "Saltar",
-                                textStyle: TextStyle(color: Colors.white),
-                              ),
-                            ],
-                            child: IconButton(
-                              icon: _isLoggingOut
-                                  ? const SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        valueColor:
-                                            AlwaysStoppedAnimation<Color>(
-                                                Colors.white),
-                                      ),
-                                    )
-                                  : const Icon(Icons.logout,
-                                      color: Colors.white),
-                              onPressed: _isLoggingOut ? null : _handleLogout,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                // Contenido principal con efecto curvo
-                Expanded(
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(60),
-                          topRight: Radius.circular(60)),
-                    ),
-                    child: SingleChildScrollView(
-                      child: Column(
-                        children: [
-                          const SizedBox(height: 30),
-
-                          // Tarjeta de información
-                          Showcase(
-                            key: _negocioShowcaseKey,
-                            title: 'Información de Negocio',
-                            description:
-                                'Aquí verás la información de tu negocio, tu nombre y el plan que tienes contratado.',
-                            targetShapeBorder: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            tooltipActionConfig: const TooltipActionConfig(
-                              position: TooltipActionPosition.inside,
-                              alignment: MainAxisAlignment.spaceBetween,
-                            ),
-                            tooltipActions: const [
-                              TooltipActionButton(
-                                type: TooltipDefaultActionType.skip,
-                                name: "Saltar",
-                                textStyle: TextStyle(color: Colors.white),
-                              ),
-                              TooltipActionButton(
-                                type: TooltipDefaultActionType.next,
-                                name: "Siguiente",
-                                textStyle: TextStyle(color: Colors.white),
-                              ),
-                            ],
-                            child: Container(
-                              margin:
-                                  const EdgeInsets.symmetric(horizontal: 20),
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(20),
-                                boxShadow: const [
-                                  BoxShadow(
-                                    color: Color(0xFFEEE6FF),
-                                    blurRadius: 10,
-                                    spreadRadius: 1,
-                                  ),
-                                ],
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.business,
-                                    color: Color(0xFFAB85FF),
-                                    size: 24,
-                                  ),
-                                  const SizedBox(width: 15),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          nombreNegocio,
-                                          style: const TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold,
-                                            color: Color.fromARGB(
-                                                255, 76, 39, 163),
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          nombre,
-                                          style: TextStyle(
-                                            color: Colors.grey.shade700,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 8),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 12,
-                                            vertical: 4,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: const Color(0xFFEEE6FF),
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                          ),
-                                          child: Text(
-                                            nombrePlan,
-                                            style: const TextStyle(
-                                              color: Color(0xFF8A56FF),
-                                              fontWeight: FontWeight.w500,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 20),
-
-                          // Botón para abrir Panel Web
-                          Showcase(
-                            key: _panelWebShowcaseKey,
-                            title: 'Panel de Administración Web',
-                            description:
-                                'Accede a tu panel de administración completo desde la web para gestionar tu negocio y trabajadores.',
-                            targetShapeBorder: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            tooltipActionConfig: const TooltipActionConfig(
-                              position: TooltipActionPosition.inside,
-                              alignment: MainAxisAlignment.spaceBetween,
-                            ),
-                            tooltipActions: const [
-                              TooltipActionButton(
-                                type: TooltipDefaultActionType.previous,
-                                name: "Atras",
-                                textStyle: TextStyle(color: Colors.white),
-                              ),
-                              TooltipActionButton(
-                                type: TooltipDefaultActionType.next,
-                                name: "Siguiente",
-                                textStyle: TextStyle(color: Colors.white),
-                              ),
-                            ],
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(horizontal: 20),
-                              padding: const EdgeInsets.all(20),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(20),
-                                boxShadow: const [
-                                  BoxShadow(
-                                    color: Color(0xFFEEE6FF),
-                                    blurRadius: 10,
-                                    spreadRadius: 1,
-                                  ),
-                                ],
-                              ),
-                              child: InkWell(
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                        builder: (context) => const WebPanelScreen()),
-                                  );
-                                },
-                                borderRadius: BorderRadius.circular(12),
-                                child: Container(
-                                  padding: const EdgeInsets.all(16),
-                                  decoration: BoxDecoration(
-                                    gradient: const LinearGradient(
-                                      colors: [
-                                        Color(0xFF8A56FF),
-                                        Color(0xFF9E73FF),
-                                      ],
-                                      begin: Alignment.centerLeft,
-                                      end: Alignment.centerRight,
-                                    ),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.language,
-                                        color: Colors.white,
-                                        size: 24,
-                                      ),
-                                      const SizedBox(width: 15),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            const Text(
-                                              'Panel de Administración',
-                                              style: TextStyle(
-                                                fontSize: 16,
-                                                fontWeight: FontWeight.bold,
-                                                color: Colors.white,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              'Gestiona tus locales, trabajadores y obten tus reportes desde la web',
-                                              style: TextStyle(
-                                                color: Colors.white.withOpacity(0.9),
-                                                fontSize: 14,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const Icon(
-                                        Icons.open_in_new,
-                                        color: Colors.white,
-                                        size: 16,
-                                      ),
-                                    ],
-                                  ),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.business,
+                                  color: Color(0xFFAB85FF),
+                                  size: 24,
                                 ),
-                              ),
-                            ),
-                          ),
-
-                          const SizedBox(height: 20),
-
-                          // Widget de Permisos
-                          Showcase(
-                            key: _permisosShowcaseKey,
-                            title: 'Permisos necesarios',
-                            description:
-                                'En esta sección puedes verificar y activar los permisos necesarios para que la aplicación funcione correctamente.',
-                            targetShapeBorder: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            tooltipActionConfig: const TooltipActionConfig(
-                              position: TooltipActionPosition.inside,
-                              alignment: MainAxisAlignment.spaceBetween,
-                            ),
-                            tooltipActions: const [
-                              TooltipActionButton(
-                                type: TooltipDefaultActionType.previous,
-                                name: "Atras",
-                                textStyle: TextStyle(color: Colors.white),
-                              ),
-                              TooltipActionButton(
-                                type: TooltipDefaultActionType.next,
-                                name: "Siguiente",
-                                textStyle: TextStyle(color: Colors.white),
-                              ),
-                            ],
-                            child: PermissionsWidget(
-                              permissions: _permissions,
-                              onRequestPermission: _handlePermissionRequest,
-                            ),
-                          ),
-
-                          // Estado de conexión
-                          if (_connectionMessage != null)
-                            Container(
-                              margin: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                color: _getStatusBackgroundColor(
-                                    _connectionMessage!),
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: _getStatusBorderColor(
-                                      _connectionMessage!),
-                                  width: 1,
-                                ),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Row(
+                                const SizedBox(width: 15),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
-                                      Icon(
-                                        _getStatusIcon(_connectionMessage!),
-                                        color: _getStatusIconColor(
-                                            _connectionMessage!),
-                                        size: 20,
+                                      Text(
+                                        nombreNegocio,
+                                        style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: Color.fromARGB(
+                                              255, 76, 39, 163),
+                                        ),
                                       ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        nombre,
+                                        style: TextStyle(
+                                          color: Colors.grey.shade700,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 12,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFEEE6FF),
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
                                         child: Text(
-                                          _connectionMessage!,
-                                          style: TextStyle(
-                                            color: _getStatusTextColor(
-                                                _connectionMessage!),
+                                          nombrePlan,
+                                          style: const TextStyle(
+                                            color: Color(0xFF8A56FF),
                                             fontWeight: FontWeight.w500,
                                           ),
                                         ),
                                       ),
                                     ],
                                   ),
-
-                                  // Botón de reintentar si está desconectado o hay error
-                                  if (_shouldShowRetryButton(
-                                      _connectionMessage!))
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 12.0),
-                                      child: SizedBox(
-                                        width: double.infinity,
-                                        child: ElevatedButton(
-                                          onPressed: _handleRetryConnection,
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor:
-                                                _getRetryButtonColor(
-                                                    _connectionMessage!),
-                                            foregroundColor: Colors.white,
-                                            padding: const EdgeInsets.symmetric(
-                                                vertical: 8),
-                                            shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                            ),
-                                          ),
-                                          child: const Text(
-                                            'Reintentar conexión',
-                                            style: TextStyle(
-                                                fontWeight: FontWeight.bold),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-
-                          const SizedBox(height: 20),
-                          // Título de notificaciones
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 20),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  Icons.notifications_none,
-                                  color: Colors.grey.shade700,
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'Últimas Notificaciones',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.grey.shade800,
-                                  ),
                                 ),
                               ],
                             ),
                           ),
+                        ),
 
-                          // Lista de notificaciones
-                          Showcase(
-                            key: _notificacionesShowcaseKey,
-                            title: 'Notificaciones capturadas',
-                            description:
-                                'Aquí verás todas las notificaciones de tus apps de pagos que BiPe Alerta ha capturado y procesado.',
-                            targetShapeBorder: RoundedRectangleBorder(
+                        const SizedBox(height: 20),
+
+                        // Botón para abrir Panel Web
+                        Showcase(
+                          key: _panelWebShowcaseKey,
+                          title: 'Panel de Administración Web',
+                          description:
+                              'Accede a tu panel de administración completo desde la web para gestionar tu negocio y trabajadores.',
+                          targetShapeBorder: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          tooltipActionConfig: const TooltipActionConfig(
+                            position: TooltipActionPosition.inside,
+                            alignment: MainAxisAlignment.spaceBetween,
+                          ),
+                          tooltipActions: const [
+                            TooltipActionButton(
+                              type: TooltipDefaultActionType.previous,
+                              name: "Atras",
+                              textStyle: TextStyle(color: Colors.white),
+                            ),
+                            TooltipActionButton(
+                              type: TooltipDefaultActionType.next,
+                              name: "Siguiente",
+                              textStyle: TextStyle(color: Colors.white),
+                            ),
+                          ],
+                          child: Container(
+                            margin: const EdgeInsets.symmetric(horizontal: 20),
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Color(0xFFEEE6FF),
+                                  blurRadius: 10,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                            child: InkWell(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (context) => const WebPanelScreen()),
+                                );
+                              },
                               borderRadius: BorderRadius.circular(12),
-                            ),
-                            tooltipActionConfig: const TooltipActionConfig(
-                              position: TooltipActionPosition.outside,
-                              alignment: MainAxisAlignment.spaceBetween,
-                            ),
-                            tooltipActions: const [
-                              TooltipActionButton(
-                                type: TooltipDefaultActionType.previous,
-                                name: "Atras",
-                                textStyle: TextStyle(color: Colors.white),
-                              ),
-                              TooltipActionButton(
-                                type: TooltipDefaultActionType.next,
-                                name: "Siguiente",
-                                textStyle: TextStyle(color: Colors.white),
-                              ),
-                            ],
-                            child: SizedBox(
-                              height: 300, // Altura fija para la lista
-                              child: notifications.isEmpty
-                                  ? Center(
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFF8A56FF),
+                                      Color(0xFF9E73FF),
+                                    ],
+                                    begin: Alignment.centerLeft,
+                                    end: Alignment.centerRight,
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.language,
+                                      color: Colors.white,
+                                      size: 24,
+                                    ),
+                                    const SizedBox(width: 15),
+                                    Expanded(
                                       child: Column(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.center,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
-                                          Icon(
-                                            Icons.notifications_off_outlined,
-                                            size: 48,
-                                            color: Colors.grey.shade400,
-                                          ),
-                                          const SizedBox(height: 12),
-                                          Text(
-                                            'No hay notificaciones',
+                                          const Text(
+                                            'Panel de Administración',
                                             style: TextStyle(
-                                              color: Colors.grey.shade600,
                                               fontSize: 16,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            'Gestiona tus locales, trabajadores y obten tus reportes desde la web',
+                                            style: TextStyle(
+                                              color: Colors.white.withOpacity(0.9),
+                                              fontSize: 14,
                                             ),
                                           ),
                                         ],
                                       ),
-                                    )
-                                  : ListView.builder(
-                                      padding: const EdgeInsets.all(20),
-                                      itemCount: notifications.length,
-                                      itemBuilder: (context, index) {
-                                        return Card(
-                                          elevation: 0,
-                                          margin:
-                                              const EdgeInsets.only(bottom: 12),
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                          ),
-                                          child: ListTile(
-                                            title: Text(
-                                              notifications[index],
-                                              style:
-                                                  const TextStyle(fontSize: 14),
-                                            ),
-                                          ),
-                                        );
-                                      },
                                     ),
+                                    const Icon(
+                                      Icons.open_in_new,
+                                      color: Colors.white,
+                                      size: 16,
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+
+                        const SizedBox(height: 20),
+
+                        // Widget de Permisos
+                        Showcase(
+                          key: _permisosShowcaseKey,
+                          title: 'Permisos necesarios',
+                          description:
+                              'En esta sección puedes verificar y activar los permisos necesarios para que la aplicación funcione correctamente.',
+                          targetShapeBorder: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          tooltipActionConfig: const TooltipActionConfig(
+                            position: TooltipActionPosition.inside,
+                            alignment: MainAxisAlignment.spaceBetween,
+                          ),
+                          tooltipActions: const [
+                            TooltipActionButton(
+                              type: TooltipDefaultActionType.previous,
+                              name: "Atras",
+                              textStyle: TextStyle(color: Colors.white),
+                            ),
+                            TooltipActionButton(
+                              type: TooltipDefaultActionType.next,
+                              name: "Siguiente",
+                              textStyle: TextStyle(color: Colors.white),
+                            ),
+                          ],
+                          child: PermissionsWidget(
+                            permissions: _permissions,
+                            onRequestPermission: _handlePermissionRequest,
+                          ),
+                        ),
+
+                        // Estado de conexión
+                        if (_connectionMessage != null)
+                          Container(
+                            margin: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: _getStatusBackgroundColor(
+                                  _connectionMessage!),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: _getStatusBorderColor(
+                                    _connectionMessage!),
+                                width: 1,
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Icon(
+                                      _getStatusIcon(_connectionMessage!),
+                                      color: _getStatusIconColor(
+                                          _connectionMessage!),
+                                      size: 20,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        _connectionMessage!,
+                                        style: TextStyle(
+                                          color: _getStatusTextColor(
+                                              _connectionMessage!),
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                    ),
+                                    // Botón de info/debug
+                                    IconButton(
+                                      icon: Icon(
+                                        Icons.info_outline,
+                                        color: _getStatusIconColor(_connectionMessage!),
+                                        size: 20,
+                                      ),
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                      onPressed: _showDebugStatus,
+                                      tooltip: 'Ver estado detallado',
+                                    ),
+                                  ],
+                                ),
+
+                                // Botón de reiniciar si hay error o desconexión
+                                if (_shouldShowRetryButton(_connectionMessage!))
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 12.0),
+                                    child: SizedBox(
+                                      width: double.infinity,
+                                      child: ElevatedButton.icon(
+                                        onPressed: _handleRestartService,
+                                        icon: const Icon(Icons.refresh, size: 18),
+                                        label: const Text(
+                                          'Forzar Reconexión',
+                                          style: TextStyle(
+                                              fontWeight: FontWeight.bold),
+                                        ),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              _getRetryButtonColor(
+                                                  _connectionMessage!),
+                                          foregroundColor: Colors.white,
+                                          padding: const EdgeInsets.symmetric(
+                                              vertical: 10),
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius:
+                                                BorderRadius.circular(8),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+
+                        const SizedBox(height: 20),
+                        // Título de notificaciones
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.notifications_none,
+                                color: Colors.grey.shade700,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Últimas Notificaciones',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey.shade800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        // Lista de notificaciones
+                        Showcase(
+                          key: _notificacionesShowcaseKey,
+                          title: 'Notificaciones capturadas',
+                          description:
+                              'Aquí verás todas las notificaciones de tus apps de pagos que BiPe Alerta ha capturado y procesado.',
+                          targetShapeBorder: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          tooltipActionConfig: const TooltipActionConfig(
+                            position: TooltipActionPosition.outside,
+                            alignment: MainAxisAlignment.spaceBetween,
+                          ),
+                          tooltipActions: const [
+                            TooltipActionButton(
+                              type: TooltipDefaultActionType.previous,
+                              name: "Atras",
+                              textStyle: TextStyle(color: Colors.white),
+                            ),
+                            TooltipActionButton(
+                              type: TooltipDefaultActionType.next,
+                              name: "Siguiente",
+                              textStyle: TextStyle(color: Colors.white),
+                            ),
+                          ],
+                          child: SizedBox(
+                            height: 300,
+                            child: notifications.isEmpty
+                                ? Center(
+                                    child: Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.notifications_off_outlined,
+                                          size: 48,
+                                          color: Colors.grey.shade400,
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          'No hay notificaciones',
+                                          style: TextStyle(
+                                            color: Colors.grey.shade600,
+                                            fontSize: 16,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  )
+                                : ListView.builder(
+                                    padding: const EdgeInsets.all(20),
+                                    itemCount: notifications.length,
+                                    itemBuilder: (context, index) {
+                                      return Card(
+                                        elevation: 0,
+                                        margin:
+                                            const EdgeInsets.only(bottom: 12),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(12),
+                                        ),
+                                        child: ListTile(
+                                          title: Text(
+                                            notifications[index],
+                                            style:
+                                                const TextStyle(fontSize: 14),
+                                          ),
+                                        ),
+                                      );
+                                    },
+                                  ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1467,8 +1550,8 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     print('Disposing HomeScreen');
-    FlutterForegroundTask.removeTaskDataCallback(_onReceiveTaskData);
-    _taskDataListenable.dispose();
+    WidgetsBinding.instance.removeObserver(this);
+    _notificationService.dispose();
     super.dispose();
   }
 }

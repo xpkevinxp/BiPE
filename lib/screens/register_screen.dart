@@ -53,7 +53,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       // Aquí iría la llamada a tu API para enviar el código
       final response = await http.post(
         Uri.parse(
-            'https://api.bipealerta.com/api/usuario/sendCodeWhatsapp'),
+            'https://apialert.c-centralizador.com/api/usuario/sendCodeWhatsapp'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           'Telefono': _phoneController.text,
@@ -100,7 +100,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     try {
       final response = await http.post(
         Uri.parse(
-            'https://api.bipealerta.com/api/usuario/SaveUsuarioNegocio/v2'),
+            'https://apialert.c-centralizador.com/api/usuario/SaveUsuarioNegocio/v2'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
           "NombreNegocio": _businessNameController.text,

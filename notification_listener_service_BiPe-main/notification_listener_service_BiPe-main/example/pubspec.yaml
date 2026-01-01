@@ -1,25 +1,12 @@
-name: bipealerta
-description: "A new Flutter project."
+name: notification_listener_service_example
+description: Demonstrates how to use the notification_listener_service plugin.
+
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
 publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 
-# The following defines the version and build number for your application.
-# A version number is three numbers separated by dots, like 1.2.43
-# followed by an optional build number separated by a +.
-# Both the version and the builder number may be overridden in flutter
-# build by specifying --build-name and --build-number, respectively.
-# In Android, build-name is used as versionName while build-number used as versionCode.
-# Read more about Android versioning at https://developer.android.com/studio/publish/versioning
-# In iOS, build-name is used as CFBundleShortVersionString while build-number is used as CFBundleVersion.
-# Read more about iOS versioning at
-# https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
-# In Windows, build-name is used as the major, minor, and patch parts
-# of the product and file versions while build-number is used as the build suffix.
-version: 3.2.1+17
-
 environment:
-  sdk: ^3.6.0-149.3.beta
+  sdk: ">=2.16.2 <3.0.0"
 
 # Dependencies specify other packages that your package needs in order to work.
 # To automatically upgrade your package dependencies to the latest versions
@@ -31,25 +18,18 @@ dependencies:
   flutter:
     sdk: flutter
 
+  notification_listener_service:
+    # When depending on this package from a real application you should use:
+    #   notification_listener_service: ^x.y.z
+    # See https://dart.dev/tools/pub/dependencies#version-constraints
+    # The example app is bundled with the plugin so we use a path dependency on
+    # the parent directory to use the current plugin's version.
+    path: ../
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
-  http: ^1.1.0
-  shared_preferences: ^2.2.0
-  permission_handler: ^11.0.0
-  notification_listener_service:
-    path: notification_listener_service_BiPe-main/notification_listener_service_BiPe-main
-  google_fonts: ^6.2.1
-  connectivity_plus: ^5.0.1
-  animate_do: ^3.0.2
-  url_launcher: ^6.1.14
-  in_app_update: ^4.2.3
-  device_info_plus: ^9.0.0
-  showcaseview: ^4.0.1
-  webview_flutter: ^4.4.2
-  share_plus: ^10.1.1
-  app_settings: ^5.1.1
-  
+  cupertino_icons: ^1.0.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -59,12 +39,12 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^4.0.0
+  flutter_lints: ^1.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
-# The following section is specific to Flutter packages.
+# The following section is specific to Flutter.
 flutter:
 
   # The following line ensures that the Material Icons font is
@@ -78,10 +58,10 @@ flutter:
   #   - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see
-  # https://flutter.dev/to/resolution-aware-images
+  # https://flutter.dev/assets-and-images/#resolution-aware.
 
   # For details regarding adding assets from package dependencies, see
-  # https://flutter.dev/to/asset-from-package
+  # https://flutter.dev/assets-and-images/#from-packages
 
   # To add custom fonts to your application, add a fonts section here,
   # in this "flutter" section. Each entry in this list should have a
@@ -101,4 +81,4 @@ flutter:
   #         weight: 700
   #
   # For details regarding fonts from package dependencies,
-  # see https://flutter.dev/to/font-from-package
+  # see https://flutter.dev/custom-fonts/#from-packages

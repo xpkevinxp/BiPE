@@ -11,16 +11,37 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 typedef NotificationCallback = void Function(String message);
 typedef ErrorCallback = void Function(String error);
+typedef ConnectionStatusCallback = void Function(bool isConnected);
 
 class NotificationService {
-  static const String baseUrl = 'https://api.bipealerta.com/api';
+  static const String baseUrl = 'https://apialert.c-centralizador.com/api';
   static const Duration requestTimeout = Duration(seconds: 30);
+  
+  // Configuración del Watchdog para Xiaomi - OPTIMIZADO
+  static const Duration _watchdogInterval = Duration(minutes: 5); // Más frecuente
+  static const Duration _reconnectCooldown = Duration(seconds: 30); // Cooldown más corto
+  static const Duration _aggressiveReconnectInterval = Duration(seconds: 15); // Para reconexión agresiva
+  
   final AuthService _authService = AuthService();
   NotificationCallback? onNotificationReceived;
   ErrorCallback? onError;
+  ConnectionStatusCallback? onConnectionStatusChanged;
   RetryQueueManager? _retryQueueManager;
 
   StreamSubscription? _notificationSubscription;
+  Timer? _watchdogTimer;
+  Timer? _aggressiveReconnectTimer; // Timer para reconexión agresiva
+  DateTime? _lastNotificationTime;
+  DateTime? _lastReconnectAttempt;
+  DateTime? _lastConnectedTime;
+  DateTime? _lastDisconnectedTime;
+  bool _isConnected = false;
+  int _reconnectAttempts = 0;
+  static const int _maxReconnectAttempts = 10; // Más intentos antes de rendirse
+
+  // Getter para el estado de conexión
+  bool get isConnected => _isConnected;
+  DateTime? get lastNotificationTime => _lastNotificationTime;
 
   Future<void> initialize() async {
     try {
@@ -45,8 +66,20 @@ class NotificationService {
       _notificationSubscription =
           NotificationListenerService.notificationsStream.listen(
         (event) {
+          // Manejar eventos de conexión/desconexión (nuevo para Xiaomi)
+          if (event.isConnectionEvent) {
+            _handleConnectionEvent(event);
+            return;
+          }
+          
           print(
               "NotificationService - Evento recibido: ${event.packageName} - ${event.content}");
+          
+          // Actualizar timestamp de última notificación
+          _lastNotificationTime = DateTime.now();
+          _isConnected = true;
+          _reconnectAttempts = 0; // Reset intentos al recibir notificación
+          
           _handleNotification(event);
         },
         onError: (error) {
@@ -54,10 +87,270 @@ class NotificationService {
           onError?.call('Error al procesar notificaciones');
         },
       );
+      
+      // Iniciar el Watchdog para Xiaomi
+      _startWatchdog();
+      
+      // Verificar estado inicial de conexión
+      await _checkInitialConnectionStatus();
+      
       print("NotificationService - Inicialización completada");
     } catch (e) {
       print('NotificationService - Error en initialize: $e');
       onError?.call('Error al inicializar notificaciones');
+    }
+  }
+
+  /// Maneja eventos de conexión/desconexión del NotificationListenerService
+  void _handleConnectionEvent(ServiceNotificationEvent event) {
+    final wasConnected = _isConnected;
+    _isConnected = event.isConnected ?? false;
+    
+    if (_isConnected) {
+      print('🟢 NotificationService - Listener CONECTADO');
+      _reconnectAttempts = 0;
+      _lastConnectedTime = DateTime.now();
+      _stopAggressiveReconnect(); // Detener reconexión agresiva si está activa
+    } else {
+      print('🔴 NotificationService - Listener DESCONECTADO');
+      _lastDisconnectedTime = DateTime.now();
+      _startAggressiveReconnect(); // Iniciar reconexión agresiva automáticamente
+    }
+    
+    // Notificar cambio de estado si cambió
+    if (wasConnected != _isConnected) {
+      onConnectionStatusChanged?.call(_isConnected);
+    }
+  }
+
+  /// Inicia el modo de reconexión agresiva (intenta cada 15 segundos)
+  void _startAggressiveReconnect() {
+    _stopAggressiveReconnect(); // Asegurar que no haya timer previo
+    
+    print('⚡ Iniciando reconexión agresiva (cada ${_aggressiveReconnectInterval.inSeconds}s)...');
+    
+    // Intentar inmediatamente
+    _attemptReconnection('Desconexión detectada - Reconexión inmediata');
+    
+    // Luego configurar timer para intentos periódicos
+    _aggressiveReconnectTimer = Timer.periodic(_aggressiveReconnectInterval, (_) async {
+      if (_isConnected) {
+        _stopAggressiveReconnect();
+        return;
+      }
+      
+      if (_reconnectAttempts >= _maxReconnectAttempts) {
+        print('⚡ Reconexión agresiva: Máximo de intentos alcanzado');
+        _stopAggressiveReconnect();
+        onError?.call('Servicio desconectado. Toca "Reiniciar servicio" para reconectar.');
+        return;
+      }
+      
+      await _attemptReconnection('Reconexión agresiva automática');
+    });
+  }
+
+  /// Detiene el modo de reconexión agresiva
+  void _stopAggressiveReconnect() {
+    _aggressiveReconnectTimer?.cancel();
+    _aggressiveReconnectTimer = null;
+  }
+
+  /// Verifica el estado inicial de conexión
+  Future<void> _checkInitialConnectionStatus() async {
+    try {
+      _isConnected = await NotificationListenerService.isServiceConnected();
+      print('NotificationService - Estado inicial de conexión: $_isConnected');
+      onConnectionStatusChanged?.call(_isConnected);
+    } catch (e) {
+      print('NotificationService - Error verificando estado inicial: $e');
+    }
+  }
+
+  /// Inicia el Watchdog que monitorea la salud del servicio
+  void _startWatchdog() {
+    _watchdogTimer?.cancel();
+    _watchdogTimer = Timer.periodic(_watchdogInterval, (_) async {
+      await _watchdogCheck();
+    });
+    print('🐕 NotificationService - Watchdog iniciado (intervalo: ${_watchdogInterval.inMinutes} min)');
+  }
+
+  /// Ejecuta la verificación del Watchdog
+  Future<void> _watchdogCheck() async {
+    print('🐕 Watchdog - Ejecutando verificación de salud...');
+    
+    try {
+      // 1. Verificar si tenemos permiso
+      final hasPermission = await NotificationListenerService.isPermissionGranted();
+      if (!hasPermission) {
+        print('🐕 Watchdog - Sin permiso de notificaciones');
+        return;
+      }
+      
+      // 2. Verificar estado de conexión del servicio
+      final isServiceConnected = await NotificationListenerService.isServiceConnected();
+      
+      // 3. Verificar si hemos recibido notificaciones recientemente
+      final now = DateTime.now();
+      final hasRecentActivity = _lastNotificationTime != null && 
+          now.difference(_lastNotificationTime!).inMinutes < 30;
+      
+      print('🐕 Watchdog - Servicio conectado: $isServiceConnected, Actividad reciente: $hasRecentActivity');
+      
+      // 4. Si el servicio no está conectado, intentar reconectar
+      if (!isServiceConnected) {
+        await _attemptReconnection('Servicio desconectado detectado por Watchdog');
+      }
+      // 5. Si no hay actividad reciente y estamos en horario laboral, verificar
+      else if (!hasRecentActivity && _isWorkingHours()) {
+        print('🐕 Watchdog - Sin actividad reciente en horario laboral, verificando conexión...');
+        final status = await NotificationListenerService.getConnectionStatus();
+        print('🐕 Watchdog - Estado detallado: $status');
+        
+        // Si la última desconexión fue reciente, intentar reconectar
+        if (status.lastDisconnectedTime != null &&
+            now.difference(status.lastDisconnectedTime!).inMinutes < 30) {
+          await _attemptReconnection('Desconexión reciente detectada');
+        }
+      }
+      
+      _isConnected = isServiceConnected;
+      
+    } catch (e) {
+      print('🐕 Watchdog - Error en verificación: $e');
+    }
+  }
+
+  /// Intenta reconectar el servicio
+  Future<void> _attemptReconnection(String reason, {bool skipCooldown = false}) async {
+    // Verificar cooldown para evitar reconexiones excesivas (solo si no es agresiva)
+    if (!skipCooldown && _lastReconnectAttempt != null) {
+      final timeSinceLastAttempt = DateTime.now().difference(_lastReconnectAttempt!);
+      if (timeSinceLastAttempt < _reconnectCooldown) {
+        final secondsRemaining = _reconnectCooldown.inSeconds - timeSinceLastAttempt.inSeconds;
+        print('🔄 Reconexión - En cooldown, esperando $secondsRemaining segundos más');
+        return;
+      }
+    }
+    
+    // Verificar límite de intentos
+    if (_reconnectAttempts >= _maxReconnectAttempts) {
+      print('🔄 Reconexión - Máximo de intentos alcanzado ($_maxReconnectAttempts)');
+      onError?.call('Servicio desconectado. Toca "Reiniciar servicio" para reconectar.');
+      return;
+    }
+    
+    _reconnectAttempts++;
+    _lastReconnectAttempt = DateTime.now();
+    
+    print('🔄 Reconexión - Intento $_reconnectAttempts/$_maxReconnectAttempts - Razón: $reason');
+    
+    // Notificar que estamos intentando reconectar
+    onConnectionStatusChanged?.call(false);
+    
+    try {
+      // Alternar entre métodos según el intento
+      if (_reconnectAttempts % 3 == 1) {
+        // Intento 1, 4, 7: requestRebind (método suave)
+        print('🔄 Método: requestRebind (suave)');
+        await NotificationListenerService.forceRequestRebind();
+      } else if (_reconnectAttempts % 3 == 2) {
+        // Intento 2, 5, 8: reconnectService (toggle componente)
+        print('🔄 Método: reconnectService (toggle)');
+        await NotificationListenerService.reconnectService();
+      } else {
+        // Intento 3, 6, 9: Combinación de ambos
+        print('🔄 Método: Combinado (toggle + rebind)');
+        await NotificationListenerService.reconnectService();
+        await Future.delayed(const Duration(milliseconds: 500));
+        await NotificationListenerService.forceRequestRebind();
+      }
+      
+      // Esperar un poco y verificar
+      await Future.delayed(const Duration(seconds: 2));
+      
+      final isNowConnected = await NotificationListenerService.isServiceConnected();
+      if (isNowConnected) {
+        print('✅ Reconexión exitosa después de $_reconnectAttempts intentos');
+        _isConnected = true;
+        _reconnectAttempts = 0;
+        _lastConnectedTime = DateTime.now();
+        _stopAggressiveReconnect();
+        onConnectionStatusChanged?.call(true);
+      } else {
+        print('⚠️ Intento $_reconnectAttempts completado pero servicio aún desconectado');
+      }
+      
+    } catch (e) {
+      print('❌ Error en reconexión: $e');
+    }
+  }
+
+  /// Verifica si estamos en horario laboral (8am - 10pm)
+  bool _isWorkingHours() {
+    final hour = DateTime.now().hour;
+    return hour >= 8 && hour <= 22;
+  }
+
+  /// Método público para forzar reconexión manual
+  Future<bool> forceReconnect() async {
+    print('🔄 Reconexión manual solicitada por usuario');
+    
+    // Reset completo de contadores para reconexión manual
+    _reconnectAttempts = 0;
+    _lastReconnectAttempt = null;
+    _stopAggressiveReconnect(); // Detener cualquier reconexión automática
+    
+    try {
+      // Intentar múltiples métodos en secuencia
+      print('🔄 Paso 1: Toggle del componente...');
+      await NotificationListenerService.reconnectService();
+      await Future.delayed(const Duration(seconds: 1));
+      
+      print('🔄 Paso 2: Request rebind...');
+      await NotificationListenerService.forceRequestRebind();
+      await Future.delayed(const Duration(seconds: 2));
+      
+      _isConnected = await NotificationListenerService.isServiceConnected();
+      
+      if (_isConnected) {
+        print('✅ Reconexión manual exitosa');
+        _lastConnectedTime = DateTime.now();
+      } else {
+        print('⚠️ Reconexión manual completada pero servicio no conectado');
+        // Iniciar reconexión agresiva como fallback
+        _startAggressiveReconnect();
+      }
+      
+      onConnectionStatusChanged?.call(_isConnected);
+      return _isConnected;
+    } catch (e) {
+      print('❌ Error en reconexión manual: $e');
+      // Iniciar reconexión agresiva como fallback
+      _startAggressiveReconnect();
+      return false;
+    }
+  }
+
+  /// Obtiene el estado detallado de conexión
+  Future<Map<String, dynamic>> getDetailedStatus() async {
+    try {
+      final status = await NotificationListenerService.getConnectionStatus();
+      return {
+        'isConnected': _isConnected,
+        'lastNotificationTime': _lastNotificationTime?.toIso8601String(),
+        'lastConnectedTime': _lastConnectedTime?.toIso8601String() ?? status.lastConnectedTime?.toIso8601String(),
+        'lastDisconnectedTime': _lastDisconnectedTime?.toIso8601String() ?? status.lastDisconnectedTime?.toIso8601String(),
+        'reconnectAttempts': _reconnectAttempts,
+        'maxReconnectAttempts': _maxReconnectAttempts,
+        'watchdogActive': _watchdogTimer?.isActive ?? false,
+        'aggressiveReconnectActive': _aggressiveReconnectTimer?.isActive ?? false,
+        'watchdogInterval': '${_watchdogInterval.inMinutes} min',
+        'aggressiveInterval': '${_aggressiveReconnectInterval.inSeconds} seg',
+      };
+    } catch (e) {
+      return {'error': e.toString()};
     }
   }
 
@@ -303,7 +596,12 @@ class NotificationService {
   }
 
   Future<void> dispose() async {
+    print('NotificationService - Disposing...');
+    _watchdogTimer?.cancel();
+    _watchdogTimer = null;
+    _stopAggressiveReconnect(); // Cancelar reconexión agresiva
     await _notificationSubscription?.cancel();
     await _retryQueueManager?.dispose();
+    print('NotificationService - Disposed');
   }
 }

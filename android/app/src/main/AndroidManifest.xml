@@ -4,19 +4,13 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.centralizador.bipealerta">
 
-    <!-- Permisos existentes -->
+    <!-- Permisos para NotificationListenerService -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"/>
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-    <!-- Permiso requerido para foreground services de tipo specialUse en Android 15+ -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
-    <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
     <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY"/>
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     
     <application
         android:enableOnBackInvokedCallback="true"
@@ -36,27 +30,6 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.service.notification.NotificationListenerService" />
-            </intent-filter>
-        </service>
-
-        <!-- Servicio para foreground task -->
-        <service
-            android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
-            android:foregroundServiceType="specialUse"
-            android:stopWithTask="false"
-            android:exported="false"
-            tools:ignore="ExportedService">
-
-            <meta-data
-                android:name="android.app.notification_channel_importance"
-                android:value="4"/>
-            
-            <meta-data
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="Servicio de monitoreo continuo de notificaciones para alertas empresariales BiPe. Requiere ejecución permanente para detectar y procesar notificaciones críticas del negocio en tiempo real." />
-
-            <intent-filter>
-                <action android:name="android.intent.action.BOOT_COMPLETED"/>
             </intent-filter>
         </service>
 

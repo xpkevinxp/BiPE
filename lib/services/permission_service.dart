@@ -1,5 +1,5 @@
-import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:notification_listener_service/notification_listener_service.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'dart:io';
 
 class PermissionService {
@@ -19,12 +19,13 @@ class PermissionService {
     };
 
     // Verificar permiso de notificaciones
-    final notificationPermission = await FlutterForegroundTask.checkNotificationPermission();
-    permissions['notification'] = notificationPermission == NotificationPermission.granted;
+    final notificationStatus = await Permission.notification.status;
+    permissions['notification'] = notificationStatus.isGranted;
 
     if (Platform.isAndroid) {
       // Verificar optimización de batería
-      permissions['battery'] = await FlutterForegroundTask.isIgnoringBatteryOptimizations;
+      final batteryStatus = await Permission.ignoreBatteryOptimizations.status;
+      permissions['battery'] = batteryStatus.isGranted;
       
       // Verificar permiso de lectura de notificaciones
       permissions['notificationListener'] = await NotificationListenerService.isPermissionGranted();
@@ -38,13 +39,14 @@ class PermissionService {
   }
 
   Future<bool> requestNotificationPermission() async {
-    final permission = await FlutterForegroundTask.requestNotificationPermission();
-    return permission == NotificationPermission.granted;
+    final status = await Permission.notification.request();
+    return status.isGranted;
   }
 
   Future<bool> requestBatteryOptimization() async {
     if (!Platform.isAndroid) return true;
-    return await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+    final status = await Permission.ignoreBatteryOptimizations.request();
+    return status.isGranted;
   }
 
   Future<bool> requestNotificationListener() async {
