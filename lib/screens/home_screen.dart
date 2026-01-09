@@ -107,6 +107,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final prefs = await SharedPreferences.getInstance();
     bool tutorialShown = prefs.getBool('tutorial_shown') ?? false;
 
+    // Verificar permisos críticos si el tutorial ya se mostró
+    if (tutorialShown) {
+      await _checkCriticalPermissions();
+    }
+
     if (!tutorialShown && mounted) {
       setState(() {
         _tutorialActive = true;
@@ -131,6 +136,37 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     } else {
       // Si el tutorial ya se mostró antes, verificar si necesitamos mostrar "¿Cómo funciona?"
       await _showHowItWorksIfNeeded();
+    }
+  }
+
+  Future<void> _checkCriticalPermissions() async {
+    final permissions = await _permissionService.checkAllPermissions();
+    
+    // Si falta optimización de batería (crítico para que no maten la app)
+    if (permissions['battery'] == false && mounted) {
+      // Esperar un momento para no ser invasivo al abrir la app
+      await Future.delayed(const Duration(seconds: 2));
+      
+      if (!mounted) return;
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.battery_alert, color: Colors.white),
+              SizedBox(width: 10),
+              Expanded(child: Text('Para funcionar en segundo plano, permite ignorar la optimización de batería.')),
+            ],
+          ),
+          backgroundColor: Colors.orange.shade800,
+          duration: const Duration(seconds: 6),
+          action: SnackBarAction(
+            label: 'ACTIVAR',
+            textColor: Colors.white,
+            onPressed: () => _handlePermissionRequest('battery'),
+          ),
+        ),
+      );
     }
   }
 
@@ -242,6 +278,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         _permissions = permissions;
         _isServiceActive = permissions['notificationListener'] ?? false;
       });
+      
+      // Verificación proactiva: Si falta optimización de batería, advertir al usuario
+      // Esto es crítico para que la app no sea destruida
+      if (permissions['battery'] == false) {
+        // No mostrar inmediatamente para no ser intrusivo, pero sí considerar mostrarlo
+        // si el usuario ya ha interactuado o después de un breve delay
+      }
     }
   }
 

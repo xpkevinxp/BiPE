@@ -19,6 +19,10 @@ import android.os.Bundle;
 import android.service.notification.NotificationListenerService;
 import android.service.notification.StatusBarNotification;
 import android.util.Log;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
+import android.app.Notification;
+import android.graphics.Color;
 
 import androidx.annotation.RequiresApi;
 
@@ -48,6 +52,10 @@ public class NotificationListener extends NotificationListenerService {
     public void onListenerConnected() {
         super.onListenerConnected();
         isConnected = true;
+        
+        // Iniciar como Foreground Service para evitar que el sistema mate el proceso
+        startForegroundService();
+
         lastConnectedTime = System.currentTimeMillis();
         Log.i(TAG, "✅ Listener CONECTADO correctamente al sistema");
         
@@ -67,6 +75,12 @@ public class NotificationListener extends NotificationListenerService {
     public void onListenerDisconnected() {
         super.onListenerDisconnected();
         isConnected = false;
+        
+        // Detener foreground pero intentar mantener vivo si es posible
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+             stopForeground(true);
+        }
+
         lastDisconnectedTime = System.currentTimeMillis();
         Log.w(TAG, "⚠️ Listener DESCONECTADO por el sistema - Intentando reconectar...");
         
@@ -270,6 +284,49 @@ private void handleNotification(StatusBarNotification notification, boolean isRe
             e.printStackTrace();
             Log.d("ERROR LARGE ICON", "getNotificationLargeIcon: " + e.getMessage());
             return null;
+        }
+    }
+
+    private void startForegroundService() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            try {
+                String channelId = "bipe_notification_listener_service";
+                String channelName = "BiPE Servicio Activo";
+                NotificationChannel channel = new NotificationChannel(channelId, channelName, NotificationManager.IMPORTANCE_LOW);
+                channel.setLightColor(Color.BLUE);
+                channel.setLockscreenVisibility(Notification.VISIBILITY_SECRET);
+                
+                NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
+                if (manager != null) {
+                    manager.createNotificationChannel(channel);
+                    
+                    Notification.Builder builder = new Notification.Builder(this, channelId);
+                    
+                    // Intentar obtener el icono de la app
+                    try {
+                        int iconId = getApplicationInfo().icon;
+                        if (iconId != 0) {
+                            builder.setSmallIcon(iconId);
+                        } else {
+                            builder.setSmallIcon(android.R.drawable.ic_dialog_info);
+                        }
+                    } catch (Exception e) {
+                        builder.setSmallIcon(android.R.drawable.ic_dialog_info);
+                    }
+                    
+                    Notification notification = builder.setOngoing(true)
+                            .setContentTitle("BiPE está activo")
+                            .setContentText("Escuchando notificaciones en segundo plano...")
+                            .setPriority(Notification.PRIORITY_MIN)
+                            .setCategory(Notification.CATEGORY_SERVICE)
+                            .build();
+                            
+                    startForeground(112233, notification);
+                    Log.i(TAG, "🛡️ Servicio promovido a Foreground");
+                }
+            } catch (Exception e) {
+                Log.e(TAG, "Error iniciando Foreground Service: " + e.getMessage());
+            }
         }
     }
 
