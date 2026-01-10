@@ -17,10 +17,11 @@ class NotificationService {
   static const String baseUrl = 'https://apialert.c-centralizador.com/api';
   static const Duration requestTimeout = Duration(seconds: 30);
   
-  // Configuración del Watchdog para Xiaomi - OPTIMIZADO
-  static const Duration _watchdogInterval = Duration(minutes: 5); // Más frecuente
-  static const Duration _reconnectCooldown = Duration(seconds: 30); // Cooldown más corto
-  static const Duration _aggressiveReconnectInterval = Duration(seconds: 15); // Para reconexión agresiva
+  // Configuración del Watchdog para Android 15 - OPTIMIZADO
+  static const Duration _watchdogInterval = Duration(minutes: 2); // Más agresivo para Android 15
+  static const Duration _reconnectCooldown = Duration(seconds: 20); // Cooldown más corto
+  static const Duration _aggressiveReconnectInterval = Duration(seconds: 10); // Para reconexión agresiva
+  static const Duration _maxTimeWithoutNotification = Duration(minutes: 15); // Tiempo máximo sin notificaciones antes de reconectar
   
   final AuthService _authService = AuthService();
   NotificationCallback? onNotificationReceived;
@@ -191,10 +192,10 @@ class NotificationService {
       // 2. Verificar estado de conexión del servicio
       final isServiceConnected = await NotificationListenerService.isServiceConnected();
       
-      // 3. Verificar si hemos recibido notificaciones recientemente
+      // 3. Verificar si hemos recibido notificaciones recientemente (Android 15 fix)
       final now = DateTime.now();
       final hasRecentActivity = _lastNotificationTime != null && 
-          now.difference(_lastNotificationTime!).inMinutes < 30;
+          now.difference(_lastNotificationTime!).inMinutes < 10; // Reducido de 30 a 10 min
       
       print('🐕 Watchdog - Servicio conectado: $isServiceConnected, Actividad reciente: $hasRecentActivity');
       
@@ -202,7 +203,13 @@ class NotificationService {
       if (!isServiceConnected) {
         await _attemptReconnection('Servicio desconectado detectado por Watchdog');
       }
-      // 5. Si no hay actividad reciente y estamos en horario laboral, verificar
+      // 5. Verificar si ha pasado mucho tiempo sin notificaciones (Android 15 fix)
+      else if (_lastNotificationTime != null && 
+               now.difference(_lastNotificationTime!) > _maxTimeWithoutNotification) {
+        print('⚠️ Watchdog - Tiempo excesivo sin notificaciones: ${now.difference(_lastNotificationTime!).inMinutes} min');
+        await _attemptReconnection('Tiempo excesivo sin notificaciones (Android 15)');
+      }
+      // 6. Si no hay actividad reciente y estamos en horario laboral, verificar
       else if (!hasRecentActivity && _isWorkingHours()) {
         print('🐕 Watchdog - Sin actividad reciente en horario laboral, verificando conexión...');
         final status = await NotificationListenerService.getConnectionStatus();
@@ -210,7 +217,7 @@ class NotificationService {
         
         // Si la última desconexión fue reciente, intentar reconectar
         if (status.lastDisconnectedTime != null &&
-            now.difference(status.lastDisconnectedTime!).inMinutes < 30) {
+            now.difference(status.lastDisconnectedTime!).inMinutes < 15) { // Reducido de 30 a 15 min
           await _attemptReconnection('Desconexión reciente detectada');
         }
       }

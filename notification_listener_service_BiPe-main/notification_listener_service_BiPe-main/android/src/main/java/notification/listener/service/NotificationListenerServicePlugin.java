@@ -160,6 +160,17 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
         }else{
             context.registerReceiver(notificationReceiver, intentFilter);
         }
+        
+        // Android 15 fix: Notificar al NotificationListener que el receiver está listo
+        try {
+            Intent readyIntent = new Intent(context, NotificationListener.class);
+            readyIntent.setAction("RECEIVER_READY");
+            context.startService(readyIntent);
+            Log.i("NotificationPlugin", "Receiver marcado como listo");
+        } catch (Exception e) {
+            Log.e("NotificationPlugin", "Error marcando receiver como listo: " + e.getMessage());
+        }
+        
         Intent listenerIntent = new Intent(context, NotificationReceiver.class);
         context.startService(listenerIntent);
         Log.i("NotificationPlugin", "Started the notifications tracking service.");

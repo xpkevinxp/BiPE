@@ -27,6 +27,10 @@ import android.graphics.Color;
 import androidx.annotation.RequiresApi;
 
 import java.io.ByteArrayOutputStream;
+import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import notification.listener.service.models.Action;
 
@@ -43,6 +47,90 @@ public class NotificationListener extends NotificationListenerService {
     // Timestamp de última conexión para debugging
     public static long lastConnectedTime = 0;
     public static long lastDisconnectedTime = 0;
+    
+    // Buffer para notificaciones cuando el receiver no está listo
+    private ConcurrentLinkedQueue<Intent> notificationBuffer;
+    private static final int MAX_BUFFER_SIZE = 50;
+    
+    // Flag para controlar si el receiver está listo
+    private static boolean isReceiverReady = false;
+    
+    // ExecutorService para procesamiento asíncrono de notificaciones (Android 15 fix)
+    private ExecutorService notificationExecutor;
+    
+    /**
+     * Llamado cuando el servicio se crea
+     */
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        
+        // Crear pool de hilos para procesamiento de notificaciones
+        // Usar 5 hilos para mayor capacidad de procesamiento en Android 15
+        notificationExecutor = Executors.newFixedThreadPool(5, r -> {
+            Thread thread = new Thread(r, "NotificationProcessor");
+            thread.setPriority(Thread.NORM_PRIORITY);
+            return thread;
+        });
+        
+        Log.i(TAG, "🚀 Servicio creado - ExecutorService inicializado");
+    }
+    
+    /**
+     * Llamado cuando se recibe un intent para el servicio
+     */
+    @Override
+    public int onStartCommand(Intent intent, int flags, int startId) {
+        super.onStartCommand(intent, flags, startId);
+        
+        // Android 15 fix: Manejar señal de que el receiver está listo
+        if (intent != null && "RECEIVER_READY".equals(intent.getAction())) {
+            isReceiverReady = true;
+            Log.i(TAG, "📡 Receiver marcado como listo desde Plugin");
+            
+            // Enviar notificaciones pendientes del buffer
+            flushNotificationBuffer();
+        }
+        
+        return START_STICKY; // Android 15 fix: Asegurar que el servicio se reinicie
+    }
+    
+    /**
+     * Llamado cuando el servicio se destruye
+     */
+    @Override
+    public void onDestroy() {
+        super.onDestroy();
+        
+        // Limpiar ExecutorService (Android 15 fix)
+        if (notificationExecutor != null) {
+            notificationExecutor.shutdown(); // Rechazar nuevas tareas
+            try {
+                if (!notificationExecutor.awaitTermination(2, TimeUnit.SECONDS)) {
+                    notificationExecutor.shutdownNow(); // Forzar terminación
+                    if (!notificationExecutor.awaitTermination(1, TimeUnit.SECONDS)) {
+                        Log.e(TAG, "ExecutorService no terminó correctamente");
+                    }
+                }
+            } catch (InterruptedException e) {
+                notificationExecutor.shutdownNow();
+                Thread.currentThread().interrupt();
+                Log.e(TAG, "Error esperando que ExecutorService termine: " + e.getMessage());
+            }
+            notificationExecutor = null;
+            Log.i(TAG, "🧹 ExecutorService limpiado");
+        }
+        
+        // Limpiar buffer
+        if (notificationBuffer != null) {
+            notificationBuffer.clear();
+            notificationBuffer = null;
+            Log.i(TAG, "🧹 Buffer de notificaciones limpiado");
+        }
+        
+        isReceiverReady = false;
+        Log.i(TAG, "🔚 Servicio destruido");
+    }
 
     /**
      * Llamado cuando el listener se conecta correctamente al sistema.
@@ -53,11 +141,33 @@ public class NotificationListener extends NotificationListenerService {
         super.onListenerConnected();
         isConnected = true;
         
+        // Verificar ExecutorService está activo (Android 15 fix)
+        if (notificationExecutor == null || notificationExecutor.isShutdown()) {
+            notificationExecutor = Executors.newFixedThreadPool(5, r -> {
+                Thread thread = new Thread(r, "NotificationProcessor");
+                thread.setPriority(Thread.NORM_PRIORITY);
+                return thread;
+            });
+            Log.i(TAG, "🔧 ExecutorService reinicializado");
+        }
+        
+        // Inicializar buffer si no existe
+        if (notificationBuffer == null) {
+            notificationBuffer = new ConcurrentLinkedQueue<>();
+            Log.i(TAG, "📦 Buffer de notificaciones inicializado");
+        }
+        
         // Iniciar como Foreground Service para evitar que el sistema mate el proceso
         startForegroundService();
 
         lastConnectedTime = System.currentTimeMillis();
         Log.i(TAG, "✅ Listener CONECTADO correctamente al sistema");
+        
+        // Marcar receiver como listo
+        isReceiverReady = true;
+        
+        // Enviar notificaciones pendientes del buffer
+        flushNotificationBuffer();
         
         // Notificar a Flutter sobre la conexión
         Intent intent = new Intent(NotificationConstants.INTENT);
@@ -75,6 +185,10 @@ public class NotificationListener extends NotificationListenerService {
     public void onListenerDisconnected() {
         super.onListenerDisconnected();
         isConnected = false;
+        
+        // Marcar receiver como no listo
+        isReceiverReady = false;
+        Log.w(TAG, "⚠️ Receiver marcado como no listo");
         
         // Detener foreground pero intentar mantener vivo si es posible
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
@@ -163,13 +277,32 @@ public class NotificationListener extends NotificationListenerService {
             isConnected = true;
             Log.i(TAG, "📥 Notificación recibida - Actualizando estado a CONECTADO");
         }
-        handleNotification(notification, false);
+        
+        // Procesar de forma asíncrona usando ExecutorService (Android 15 fix)
+        if (notificationExecutor != null && !notificationExecutor.isShutdown()) {
+            notificationExecutor.submit(() -> {
+                handleNotification(notification, false);
+            });
+        } else {
+            // Fallback: procesar síncronamente si el executor no está listo
+            Log.w(TAG, "⚠️ ExecutorService no disponible, procesando síncronamente");
+            handleNotification(notification, false);
+        }
     }
 
     @RequiresApi(api = VERSION_CODES.KITKAT)
     @Override
     public void onNotificationRemoved(StatusBarNotification sbn) {
-        handleNotification(sbn, true);
+        // Procesar de forma asíncrona usando ExecutorService (Android 15 fix)
+        if (notificationExecutor != null && !notificationExecutor.isShutdown()) {
+            notificationExecutor.submit(() -> {
+                handleNotification(sbn, true);
+            });
+        } else {
+            // Fallback: procesar síncronamente si el executor no está listo
+            Log.w(TAG, "⚠️ ExecutorService no disponible, procesando síncronamente");
+            handleNotification(sbn, true);
+        }
     }
 
     @RequiresApi(api = VERSION_CODES.KITKAT)
@@ -248,11 +381,49 @@ private void handleNotification(StatusBarNotification notification, boolean isRe
                 }
             }
         }
-        sendBroadcast(intent);
+        
+        // Enviar la notificación - usar buffer si el receiver no está listo (Android 15 fix)
+        if (isReceiverReady) {
+            sendBroadcast(intent);
+            Log.d(TAG, "📤 Notificación enviada al receiver");
+        } else {
+            // Bufferizar si el receiver no está listo
+            if (notificationBuffer != null && notificationBuffer.size() < MAX_BUFFER_SIZE) {
+                notificationBuffer.offer(intent);
+                Log.d(TAG, "📦 Notificación bufferizada (${notificationBuffer.size()}/$MAX_BUFFER_SIZE)");
+            } else if (notificationBuffer != null && notificationBuffer.size() >= MAX_BUFFER_SIZE) {
+                Log.w(TAG, "⚠️ Buffer lleno, descartando notificación más antigua");
+                notificationBuffer.poll();
+                notificationBuffer.offer(intent);
+            }
+        }
     } catch (Exception e) {
         Log.e("NotificationListener", "Error en handleNotification: " + e.getMessage());
     }
 }
+
+    /**
+     * Envía todas las notificaciones del buffer al receiver (Android 15 fix)
+     */
+    private void flushNotificationBuffer() {
+        if (notificationBuffer == null || notificationBuffer.isEmpty()) {
+            Log.d(TAG, "📦 Buffer vacío, nada que enviar");
+            return;
+        }
+        
+        int flushedCount = 0;
+        Intent notification;
+        while ((notification = notificationBuffer.poll()) != null) {
+            try {
+                sendBroadcast(notification);
+                flushedCount++;
+            } catch (Exception e) {
+                Log.e(TAG, "Error al enviar notificación del buffer: " + e.getMessage());
+            }
+        }
+        
+        Log.i(TAG, "✅ Buffer vaciado - $flushedCount notificaciones enviadas");
+    }
 
     public byte[] getAppIcon(String packageName) {
         try {
@@ -292,9 +463,20 @@ private void handleNotification(StatusBarNotification notification, boolean isRe
             try {
                 String channelId = "bipe_notification_listener_service";
                 String channelName = "BiPE Servicio Activo";
-                NotificationChannel channel = new NotificationChannel(channelId, channelName, NotificationManager.IMPORTANCE_LOW);
+                
+                // Android 15 fix: Usar IMPORTANCE_HIGH para mayor prioridad del servicio
+                int importance = Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE 
+                    ? NotificationManager.IMPORTANCE_HIGH 
+                    : NotificationManager.IMPORTANCE_DEFAULT;
+                    
+                NotificationChannel channel = new NotificationChannel(channelId, channelName, importance);
                 channel.setLightColor(Color.BLUE);
                 channel.setLockscreenVisibility(Notification.VISIBILITY_SECRET);
+                
+                // Android 15 fix: Configuraciones adicionales para evitar que el sistema mate el servicio
+                channel.setShowBadge(false);
+                channel.setSound(null, null);
+                channel.enableVibration(false);
                 
                 NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);
                 if (manager != null) {
@@ -314,15 +496,32 @@ private void handleNotification(StatusBarNotification notification, boolean isRe
                         builder.setSmallIcon(android.R.drawable.ic_dialog_info);
                     }
                     
+                    // Android 15 fix: Configuración mejorada para Foreground Service con máxima prioridad
                     Notification notification = builder.setOngoing(true)
                             .setContentTitle("BiPE está activo")
                             .setContentText("Escuchando notificaciones en segundo plano...")
-                            .setPriority(Notification.PRIORITY_MIN)
+                            .setPriority(Notification.PRIORITY_HIGH) // Aumentado a HIGH para Android 15
                             .setCategory(Notification.CATEGORY_SERVICE)
+                            .setAutoCancel(false)
+                            .setShowWhen(false)
+                            .setWhen(System.currentTimeMillis())
                             .build();
                             
-                    startForeground(112233, notification);
-                    Log.i(TAG, "🛡️ Servicio promovido a Foreground");
+                    // Android 15 fix: Configurar comportamiento del servicio foreground
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                        try {
+                            builder.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE);
+                        } catch (Exception e) {
+                            Log.w(TAG, "No se pudo setForegroundServiceBehavior: " + e.getMessage());
+                        }
+                    }
+                    
+                    // Android 15 fix: Asegurar que el servicio se inicie con prioridad adecuada
+                    // Usar solo dataSync para evitar problemas con Google Play Console
+                    int serviceTypes = android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC;
+                    
+                    startForeground(112233, notification, serviceTypes);
+                    Log.i(TAG, "🛡️ Servicio promovido a Foreground (Android 15 optimizado con máxima prioridad)");
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Error iniciando Foreground Service: " + e.getMessage());
