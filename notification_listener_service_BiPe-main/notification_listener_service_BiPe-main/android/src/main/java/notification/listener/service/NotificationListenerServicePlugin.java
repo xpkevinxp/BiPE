@@ -171,9 +171,7 @@ public class NotificationListenerServicePlugin implements FlutterPlugin, Activit
             Log.e("NotificationPlugin", "Error marcando receiver como listo: " + e.getMessage());
         }
         
-        Intent listenerIntent = new Intent(context, NotificationReceiver.class);
-        context.startService(listenerIntent);
-        Log.i("NotificationPlugin", "Started the notifications tracking service.");
+        Log.i("NotificationPlugin", "Notifications tracking receiver registered.");
     }
 
     @Override

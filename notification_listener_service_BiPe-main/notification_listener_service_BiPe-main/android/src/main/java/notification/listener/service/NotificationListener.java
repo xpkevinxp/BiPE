@@ -27,10 +27,23 @@ import android.graphics.Color;
 import androidx.annotation.RequiresApi;
 
 import java.io.ByteArrayOutputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import android.content.SharedPreferences;
+import org.json.JSONArray;
+import org.json.JSONObject;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Locale;
+import java.util.TimeZone;
 
 import notification.listener.service.models.Action;
 
@@ -40,6 +53,7 @@ import notification.listener.service.models.Action;
 public class NotificationListener extends NotificationListenerService {
 
     private static final String TAG = "NotificationListener";
+    private static final String API_BASE = "https://apialert.c-centralizador.com/api";
     
     // Estado de conexión del listener - accesible desde el plugin
     public static boolean isConnected = false;
@@ -330,6 +344,7 @@ private void handleNotification(StatusBarNotification notification, boolean isRe
         intent.putExtra(NotificationConstants.NOTIFICATIONS_ICON, appIcon);
         intent.putExtra(NotificationConstants.NOTIFICATIONS_LARGE_ICON, largeIcon);
 
+        String safeText = null;
         if (extras != null) {
             CharSequence title = extras.getCharSequence(Notification.EXTRA_TITLE);
             CharSequence text = extras.getCharSequence(Notification.EXTRA_TEXT);
@@ -338,7 +353,7 @@ private void handleNotification(StatusBarNotification notification, boolean isRe
             String safeTitle = (title == null) ? null : 
                 (title.length() > 100 ? title.subSequence(0, 100) + "..." : title.toString());
             
-            String safeText = (text == null) ? null : 
+            safeText = (text == null) ? null : 
                 (text.length() > 500 ? text.subSequence(0, 500) + "..." : text.toString());
                 
             intent.putExtra(NotificationConstants.NOTIFICATION_TITLE, safeTitle);
@@ -395,6 +410,14 @@ private void handleNotification(StatusBarNotification notification, boolean isRe
                 Log.w(TAG, "⚠️ Buffer lleno, descartando notificación más antigua");
                 notificationBuffer.poll();
                 notificationBuffer.offer(intent);
+            }
+            if (!isRemoved && safeText != null && notificationExecutor != null && !notificationExecutor.isShutdown()) {
+                final String contentCopy = safeText;
+                final int idCopy = notification.getId();
+                final String pkgCopy = packageName;
+                notificationExecutor.submit(() -> {
+                    tryNativeSend(contentCopy, idCopy, pkgCopy);
+                });
             }
         }
     } catch (Exception e) {
@@ -526,6 +549,139 @@ private void handleNotification(StatusBarNotification notification, boolean isRe
             } catch (Exception e) {
                 Log.e(TAG, "Error iniciando Foreground Service: " + e.getMessage());
             }
+        }
+    }
+
+    private void tryNativeSend(String content, int id, String packageName) {
+        try {
+            SharedPreferences prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE);
+            String token = prefs.getString("flutter.jwt_token", null);
+            int idUsuario = prefs.getInt("flutter.idUsuario", -1);
+            int idNegocio = prefs.getInt("flutter.idNegocio", -1);
+            String bipesJson = prefs.getString("flutter.bipes", null);
+            if (token == null || bipesJson == null || idUsuario <= 0 || idNegocio <= 0) {
+                return;
+            }
+            flushQueueIfAny(prefs, token);
+            JSONArray arr = new JSONArray(bipesJson);
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject bipe = arr.getJSONObject(i);
+                String contain = bipe.optString("contain", null);
+                String pkg = bipe.optString("packageName", null);
+                String regex = bipe.optString("regex", null);
+                boolean hasMonto = bipe.optBoolean("hasMonto", false);
+                int idBilletera = bipe.optInt("idBilletera", 0);
+                if (contain == null || pkg == null || regex == null) {
+                    continue;
+                }
+                if (!pkg.equals(packageName) && !pkg.equals("-1")) {
+                    continue;
+                }
+                if (!content.contains(contain)) {
+                    continue;
+                }
+                Pattern p = Pattern.compile(regex);
+                Matcher m = p.matcher(content);
+                if (!m.find()) {
+                    continue;
+                }
+                String nombreCliente = m.groupCount() > 1 ? m.group(1) : contain;
+                double monto = 0.0;
+                if (hasMonto) {
+                    String montoStr = m.groupCount() > 1 ? m.group(2) : m.group(1);
+                    try {
+                        montoStr = montoStr.replace(",", "").replace("S/ ", "").replace("s/ ", "");
+                        monto = Double.parseDouble(montoStr);
+                    } catch (Exception ignored) {}
+                }
+                JSONObject payload = new JSONObject();
+                payload.put("IdUsuarioNegocio", idUsuario);
+                payload.put("IdNegocio", idNegocio);
+                payload.put("NombreCliente", nombreCliente);
+                payload.put("Monto", monto);
+                payload.put("Estado", "ACTIVO");
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
+                sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+                payload.put("FechaHora", sdf.format(new Date()));
+                payload.put("IdNotificationApp", id);
+                payload.put("IdBilletera", idBilletera);
+                payload.put("PackageName", packageName);
+                URL url = new URL(API_BASE + "/yape");
+                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                conn.setRequestMethod("POST");
+                conn.setConnectTimeout(15000);
+                conn.setReadTimeout(15000);
+                conn.setDoOutput(true);
+                conn.setRequestProperty("Content-Type", "application/json");
+                conn.setRequestProperty("Authorization", "Bearer " + token);
+                byte[] body = payload.toString().getBytes("UTF-8");
+                OutputStream os = conn.getOutputStream();
+                os.write(body);
+                os.flush();
+                os.close();
+                int code = conn.getResponseCode();
+                conn.disconnect();
+                if (code == 200) {
+                    return;
+                } else {
+                    addToQueue(prefs, payload);
+                }
+            }
+        } catch (Exception e) {
+            Log.e(TAG, "Native send error: " + e.getMessage());
+        }
+    }
+    
+    private void addToQueue(SharedPreferences prefs, JSONObject payload) {
+        try {
+            String q = prefs.getString("flutter.native_retry_queue", "[]");
+            JSONArray arr = new JSONArray(q);
+            arr.put(payload);
+            prefs.edit().putString("flutter.native_retry_queue", arr.toString()).apply();
+        } catch (Exception e) {
+            Log.e(TAG, "Error al agregar a cola nativa: " + e.getMessage());
+        }
+    }
+    
+    private void flushQueueIfAny(SharedPreferences prefs, String token) {
+        try {
+            String q = prefs.getString("flutter.native_retry_queue", "[]");
+            JSONArray arr = new JSONArray(q);
+            if (arr.length() == 0) return;
+            JSONArray toKeep = new JSONArray();
+            for (int i = 0; i < arr.length(); i++) {
+                JSONObject payload = arr.optJSONObject(i);
+                if (payload == null) continue;
+                if (!postPayload(token, payload)) {
+                    toKeep.put(payload);
+                }
+            }
+            prefs.edit().putString("flutter.native_retry_queue", toKeep.toString()).apply();
+        } catch (Exception e) {
+            Log.e(TAG, "Error al vaciar cola nativa: " + e.getMessage());
+        }
+    }
+    
+    private boolean postPayload(String token, JSONObject payload) {
+        try {
+            URL url = new URL(API_BASE + "/yape");
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("POST");
+            conn.setConnectTimeout(15000);
+            conn.setReadTimeout(15000);
+            conn.setDoOutput(true);
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setRequestProperty("Authorization", "Bearer " + token);
+            byte[] body = payload.toString().getBytes("UTF-8");
+            OutputStream os = conn.getOutputStream();
+            os.write(body);
+            os.flush();
+            os.close();
+            int code = conn.getResponseCode();
+            conn.disconnect();
+            return code == 200;
+        } catch (Exception e) {
+            return false;
         }
     }
 
