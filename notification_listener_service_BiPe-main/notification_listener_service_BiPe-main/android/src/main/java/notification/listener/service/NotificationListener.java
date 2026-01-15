@@ -54,6 +54,7 @@ public class NotificationListener extends NotificationListenerService {
 
     private static final String TAG = "NotificationListener";
     private static final String API_BASE = "https://apialert.c-centralizador.com/api";
+    private volatile boolean isForeground = false;
     
     // Estado de conexión del listener - accesible desde el plugin
     public static boolean isConnected = false;
@@ -143,6 +144,14 @@ public class NotificationListener extends NotificationListenerService {
         }
         
         isReceiverReady = false;
+        try {
+            if (isForeground && Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                stopForeground(true);
+                isForeground = false;
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "stopForeground en onDestroy falló: " + e.getMessage());
+        }
         Log.i(TAG, "🔚 Servicio destruido");
     }
 
@@ -173,6 +182,7 @@ public class NotificationListener extends NotificationListenerService {
         
         // Iniciar como Foreground Service para evitar que el sistema mate el proceso
         startForegroundService();
+        isForeground = true;
 
         lastConnectedTime = System.currentTimeMillis();
         Log.i(TAG, "✅ Listener CONECTADO correctamente al sistema");
@@ -206,7 +216,14 @@ public class NotificationListener extends NotificationListenerService {
         
         // Detener foreground pero intentar mantener vivo si es posible
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-             stopForeground(true);
+             try {
+                 if (isForeground) {
+                     stopForeground(true);
+                     isForeground = false;
+                 }
+             } catch (Exception e) {
+                 Log.w(TAG, "stopForeground falló: " + e.getMessage());
+             }
         }
 
         lastDisconnectedTime = System.currentTimeMillis();
@@ -227,6 +244,13 @@ public class NotificationListener extends NotificationListenerService {
             } catch (Exception e) {
                 Log.e(TAG, "❌ Error al solicitar reconexión: " + e.getMessage());
             }
+        }
+        
+        // Opcional: detener el servicio si quedó en background sin conexión
+        try {
+            stopSelf();
+        } catch (Exception e) {
+            Log.w(TAG, "stopSelf falló: " + e.getMessage());
         }
     }
 
