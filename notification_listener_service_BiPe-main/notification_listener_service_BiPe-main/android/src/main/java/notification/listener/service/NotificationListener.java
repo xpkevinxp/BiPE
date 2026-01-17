@@ -181,8 +181,7 @@ public class NotificationListener extends NotificationListenerService {
         }
         
         // Iniciar como Foreground Service para evitar que el sistema mate el proceso
-        startForegroundService();
-        isForeground = true;
+        isForeground = startForegroundService();
 
         lastConnectedTime = System.currentTimeMillis();
         Log.i(TAG, "✅ Listener CONECTADO correctamente al sistema");
@@ -251,6 +250,25 @@ public class NotificationListener extends NotificationListenerService {
             stopSelf();
         } catch (Exception e) {
             Log.w(TAG, "stopSelf falló: " + e.getMessage());
+        }
+    }
+
+    @RequiresApi(api = 34)
+    public void onTimeout(int startId, int fgsType) {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                if (isForeground) {
+                    stopForeground(true);
+                    isForeground = false;
+                }
+            }
+        } catch (Exception e) {
+            Log.w(TAG, "stopForeground en onTimeout falló: " + e.getMessage());
+        }
+        try {
+            stopSelf();
+        } catch (Exception e) {
+            Log.w(TAG, "stopSelf en onTimeout falló: " + e.getMessage());
         }
     }
 
@@ -505,7 +523,10 @@ private void handleNotification(StatusBarNotification notification, boolean isRe
         }
     }
 
-    private void startForegroundService() {
+    private boolean startForegroundService() {
+        if (Build.VERSION.SDK_INT >= 34) {
+            return false;
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             try {
                 String channelId = "bipe_notification_listener_service";
@@ -565,15 +586,20 @@ private void handleNotification(StatusBarNotification notification, boolean isRe
                     
                     // Android 15 fix: Asegurar que el servicio se inicie con prioridad adecuada
                     // Usar solo dataSync para evitar problemas con Google Play Console
-                    int serviceTypes = android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC;
-                    
-                    startForeground(112233, notification, serviceTypes);
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        int serviceTypes = android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC;
+                        startForeground(112233, notification, serviceTypes);
+                    } else {
+                        startForeground(112233, notification);
+                    }
                     Log.i(TAG, "🛡️ Servicio promovido a Foreground (Android 15 optimizado con máxima prioridad)");
+                    return true;
                 }
             } catch (Exception e) {
                 Log.e(TAG, "Error iniciando Foreground Service: " + e.getMessage());
             }
         }
+        return false;
     }
 
     private void tryNativeSend(String content, int id, String packageName) {
@@ -587,7 +613,12 @@ private void handleNotification(StatusBarNotification notification, boolean isRe
                 return;
             }
             flushQueueIfAny(prefs, token);
-            JSONArray arr = new JSONArray(bipesJson);
+            JSONArray arr;
+            try {
+                arr = new JSONArray(bipesJson);
+            } catch (Exception e) {
+                return;
+            }
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject bipe = arr.getJSONObject(i);
                 String contain = bipe.optString("contain", null);
@@ -604,9 +635,14 @@ private void handleNotification(StatusBarNotification notification, boolean isRe
                 if (!content.contains(contain)) {
                     continue;
                 }
-                Pattern p = Pattern.compile(regex);
-                Matcher m = p.matcher(content);
-                if (!m.find()) {
+                Matcher m;
+                try {
+                    Pattern p = Pattern.compile(regex);
+                    m = p.matcher(content);
+                    if (!m.find()) {
+                        continue;
+                    }
+                } catch (Exception e) {
                     continue;
                 }
                 String nombreCliente = m.groupCount() > 1 ? m.group(1) : contain;
