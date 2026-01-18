@@ -644,7 +644,7 @@ private void handleNotification(StatusBarNotification notification, boolean isRe
             }
             
             // Concatenar título y contenido para buscar en ambos
-            String fullTextToSearch = (title + " " + content).trim();
+            String fullTextToSearch = (content).trim();
             Log.d(TAG, "Native: Texto a analizar: " + fullTextToSearch);
 
             flushQueueIfAny(prefs, token);
