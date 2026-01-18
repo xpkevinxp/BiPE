@@ -536,6 +536,12 @@ class NotificationService {
         'PackageName': packageName
       };
 
+      print('✅ Notificación procesada para UI: $nombreCliente - $monto');
+      // NOTA: El envío al API ahora lo maneja EXCLUSIVAMENTE la capa nativa (Android)
+      // para evitar duplicidad y garantizar funcionamiento en segundo plano.
+      // Aquí solo mantenemos el procesamiento para actualizar la UI si fuera necesario.
+      
+      /* 
       try {
         final success = await _sendToApiWithRetry(data);
         if (!success && _retryQueueManager != null) {
@@ -548,6 +554,7 @@ class NotificationService {
           await _retryQueueManager!.addToQueue(data);
         }
       }
+      */
     } catch (e) {
       print('Error procesando mensaje ${bipe.contain}: $e');
       onError?.call('Error al procesar pago ${bipe.contain}');

@@ -387,12 +387,14 @@ private void handleNotification(StatusBarNotification notification, boolean isRe
         intent.putExtra(NotificationConstants.NOTIFICATIONS_LARGE_ICON, largeIcon);
 
         String safeText = null;
+        String safeTitle = null;
+        
         if (extras != null) {
             CharSequence title = extras.getCharSequence(Notification.EXTRA_TITLE);
             CharSequence text = extras.getCharSequence(Notification.EXTRA_TEXT);
 
             // Limitar tamaño del texto para evitar TransactionTooLargeException
-            String safeTitle = (title == null) ? null : 
+            safeTitle = (title == null) ? null : 
                 (title.length() > 100 ? title.subSequence(0, 100) + "..." : title.toString());
             
             safeText = (text == null) ? null : 
@@ -439,28 +441,30 @@ private void handleNotification(StatusBarNotification notification, boolean isRe
             }
         }
         
-        // Enviar la notificación - usar buffer si el receiver no está listo (Android 15 fix)
+        // Enviar la notificación
+        // CAMBIO CRITICO: Siempre ejecutar la lógica nativa para asegurar el envío al API.
+        // Ya no dependemos exclusivamente de Flutter (isReceiverReady) para el procesamiento crítico.
+        
+        // 1. Intentar enviar a Flutter si está activo (para UI)
         if (isReceiverReady) {
-            sendBroadcast(intent);
-            Log.d(TAG, "📤 Notificación enviada al receiver");
-        } else {
-            // Bufferizar si el receiver no está listo
-            if (notificationBuffer != null && notificationBuffer.size() < MAX_BUFFER_SIZE) {
-                notificationBuffer.offer(intent);
-                Log.d(TAG, "📦 Notificación bufferizada (${notificationBuffer.size()}/$MAX_BUFFER_SIZE)");
-            } else if (notificationBuffer != null && notificationBuffer.size() >= MAX_BUFFER_SIZE) {
-                Log.w(TAG, "⚠️ Buffer lleno, descartando notificación más antigua");
-                notificationBuffer.poll();
-                notificationBuffer.offer(intent);
+            try {
+                sendBroadcast(intent);
+                Log.d(TAG, "� Notificación enviada a Flutter (UI)");
+            } catch (Exception e) {
+                Log.w(TAG, "⚠️ Falló envío a Flutter: " + e.getMessage());
             }
-            if (!isRemoved && safeText != null && notificationExecutor != null && !notificationExecutor.isShutdown()) {
-                final String contentCopy = safeText;
-                final int idCopy = notification.getId();
-                final String pkgCopy = packageName;
-                notificationExecutor.submit(() -> {
-                    tryNativeSend(contentCopy, idCopy, pkgCopy);
-                });
-            }
+        }
+        
+        // 2. SIEMPRE ejecutar envío nativo (para asegurar API)
+        // Esto garantiza que aunque Flutter se cierre o falle, la notificación se procese.
+        if (!isRemoved && (safeText != null || safeTitle != null) && notificationExecutor != null && !notificationExecutor.isShutdown()) {
+            final String contentCopy = safeText != null ? safeText : "";
+            final String titleCopy = safeTitle != null ? safeTitle : "";
+            final int idCopy = notification.getId();
+            final String pkgCopy = packageName;
+            notificationExecutor.submit(() -> {
+                tryNativeSend(titleCopy, contentCopy, idCopy, pkgCopy);
+            });
         }
     } catch (Exception e) {
         Log.e("NotificationListener", "Error en handleNotification: " + e.getMessage());
@@ -602,23 +606,56 @@ private void handleNotification(StatusBarNotification notification, boolean isRe
         return false;
     }
 
-    private void tryNativeSend(String content, int id, String packageName) {
+    private void tryNativeSend(String title, String content, int id, String packageName) {
         try {
+            Log.d(TAG, "Native: Iniciando procesamiento nativo para " + packageName);
+            // Recuperar preferencias con manejo seguro de tipos
             SharedPreferences prefs = getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE);
             String token = prefs.getString("flutter.jwt_token", null);
-            int idUsuario = prefs.getInt("flutter.idUsuario", -1);
-            int idNegocio = prefs.getInt("flutter.idNegocio", -1);
             String bipesJson = prefs.getString("flutter.bipes", null);
-            if (token == null || bipesJson == null || idUsuario <= 0 || idNegocio <= 0) {
+            
+            // Fix: Manejar idUsuario e idNegocio como Long y castear a int si es necesario, 
+            // ya que Flutter a veces guarda enteros grandes como Long en SharedPreferences.
+            int idUsuario = -1;
+            try {
+                idUsuario = prefs.getInt("flutter.idUsuario", -1);
+            } catch (ClassCastException e) {
+                // Si falla, intentar leer como Long
+                long val = prefs.getLong("flutter.idUsuario", -1);
+                idUsuario = (int) val;
+            }
+
+            int idNegocio = -1;
+            try {
+                idNegocio = prefs.getInt("flutter.idNegocio", -1);
+            } catch (ClassCastException e) {
+                // Si falla, intentar leer como Long
+                long val = prefs.getLong("flutter.idNegocio", -1);
+                idNegocio = (int) val;
+            }
+            
+            if (token == null) {
+                Log.e(TAG, "Native: Token es NULL. No se puede enviar.");
                 return;
             }
+            if (bipesJson == null) {
+                Log.e(TAG, "Native: Bipes JSON es NULL. No hay reglas configuradas.");
+                return;
+            }
+            
+            // Concatenar título y contenido para buscar en ambos
+            String fullTextToSearch = (title + " " + content).trim();
+            Log.d(TAG, "Native: Texto a analizar: " + fullTextToSearch);
+
             flushQueueIfAny(prefs, token);
             JSONArray arr;
             try {
                 arr = new JSONArray(bipesJson);
             } catch (Exception e) {
+                Log.e(TAG, "Native: Error parseando bipes JSON: " + e.getMessage());
                 return;
             }
+            
             for (int i = 0; i < arr.length(); i++) {
                 JSONObject bipe = arr.getJSONObject(i);
                 String contain = bipe.optString("contain", null);
@@ -626,34 +663,51 @@ private void handleNotification(StatusBarNotification notification, boolean isRe
                 String regex = bipe.optString("regex", null);
                 boolean hasMonto = bipe.optBoolean("hasMonto", false);
                 int idBilletera = bipe.optInt("idBilletera", 0);
+                
                 if (contain == null || pkg == null || regex == null) {
                     continue;
                 }
+                
+                // Verificar paquete
                 if (!pkg.equals(packageName) && !pkg.equals("-1")) {
                     continue;
                 }
-                if (!content.contains(contain)) {
+                
+                // Verificar contain (case insensitive podría ser útil, pero mantenemos lógica original por ahora)
+                if (!fullTextToSearch.contains(contain)) {
                     continue;
                 }
+                Log.d(TAG, "Native: 'Contain' encontrado: " + contain);
+
                 Matcher m;
                 try {
-                    Pattern p = Pattern.compile(regex);
-                    m = p.matcher(content);
+                    Pattern p = Pattern.compile(regex); // Ojo: flags por defecto
+                    m = p.matcher(fullTextToSearch);
                     if (!m.find()) {
+                        Log.d(TAG, "Native: Regex no hizo match: " + regex);
                         continue;
                     }
                 } catch (Exception e) {
+                    Log.e(TAG, "Native: Error en regex: " + e.getMessage());
                     continue;
                 }
+                
+                Log.i(TAG, "Native: MATCH EXITOSO para regla: " + contain);
+
                 String nombreCliente = m.groupCount() > 1 ? m.group(1) : contain;
                 double monto = 0.0;
                 if (hasMonto) {
                     String montoStr = m.groupCount() > 1 ? m.group(2) : m.group(1);
                     try {
-                        montoStr = montoStr.replace(",", "").replace("S/ ", "").replace("s/ ", "");
-                        monto = Double.parseDouble(montoStr);
-                    } catch (Exception ignored) {}
+                        if (montoStr != null) {
+                            montoStr = montoStr.replace(",", "").replace("S/ ", "").replace("s/ ", "").trim();
+                            monto = Double.parseDouble(montoStr);
+                        }
+                    } catch (Exception ignored) {
+                        Log.w(TAG, "Native: Error parseando monto: " + montoStr);
+                    }
                 }
+                
                 JSONObject payload = new JSONObject();
                 payload.put("IdUsuarioNegocio", idUsuario);
                 payload.put("IdNegocio", idNegocio);
@@ -666,6 +720,9 @@ private void handleNotification(StatusBarNotification notification, boolean isRe
                 payload.put("IdNotificationApp", id);
                 payload.put("IdBilletera", idBilletera);
                 payload.put("PackageName", packageName);
+                
+                Log.d(TAG, "Native: Enviando payload: " + payload.toString());
+
                 URL url = new URL(API_BASE + "/yape");
                 HttpURLConnection conn = (HttpURLConnection) url.openConnection();
                 conn.setRequestMethod("POST");
@@ -681,14 +738,18 @@ private void handleNotification(StatusBarNotification notification, boolean isRe
                 os.close();
                 int code = conn.getResponseCode();
                 conn.disconnect();
+                
                 if (code == 200) {
+                    Log.i(TAG, "Native: Envio exitoso (200 OK)");
                     return;
                 } else {
+                    Log.w(TAG, "Native: Fallo envio (Code " + code + "), agregando a cola.");
                     addToQueue(prefs, payload);
                 }
             }
         } catch (Exception e) {
             Log.e(TAG, "Native send error: " + e.getMessage());
+            e.printStackTrace();
         }
     }
     

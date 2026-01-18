@@ -22,3 +22,4 @@
 
 # Notification Listener
 -keep class com.pravera.notification_listener_service.** { *; }
+-keep class notification.listener.service.** { *; }

@@ -31,11 +31,6 @@ class BipeHealthWorker(appContext: Context, workerParams: WorkerParameters) :
                     )
                 }
             } catch (_: Exception) {}
-            try {
-                val readyIntent = Intent(applicationContext, NotificationListener::class.java)
-                readyIntent.action = "RECEIVER_READY"
-                applicationContext.startService(readyIntent)
-            } catch (_: Exception) {}
             flushNativeQueue()
             return Result.success()
         } catch (_: Exception) {

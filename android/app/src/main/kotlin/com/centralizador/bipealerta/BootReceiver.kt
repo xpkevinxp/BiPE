@@ -31,11 +31,6 @@ class BootReceiver : BroadcastReceiver() {
                 }
             } catch (_: Exception) {}
             try {
-                val readyIntent = Intent(context, NotificationListener::class.java)
-                readyIntent.action = "RECEIVER_READY"
-                context.startService(readyIntent)
-            } catch (_: Exception) {}
-            try {
                 val constraints = Constraints.Builder()
                     .setRequiredNetworkType(NetworkType.CONNECTED)
                     .build()
