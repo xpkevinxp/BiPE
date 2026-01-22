@@ -714,8 +714,9 @@ private void handleNotification(StatusBarNotification notification, boolean isRe
                 payload.put("NombreCliente", nombreCliente);
                 payload.put("Monto", monto);
                 payload.put("Estado", "ACTIVO");
-                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.US);
-                sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+                // Formato hora Perú (America/Lima)
+                SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS", Locale.US);
+                sdf.setTimeZone(TimeZone.getTimeZone("America/Lima"));
                 payload.put("FechaHora", sdf.format(new Date()));
                 payload.put("IdNotificationApp", id);
                 payload.put("IdBilletera", idBilletera);
